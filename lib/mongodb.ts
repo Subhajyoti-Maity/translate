@@ -7,43 +7,42 @@ declare global {
   };
 }
 
-// Initialize global mongoose state if it doesn't exist
-if (!global.mongoose) {
-  global.mongoose = {
-    conn: null,
-    promise: null,
-  };
+const MONGODB_URI = process.env.MONGODB_URI!;
+
+if (!MONGODB_URI) {
+  throw new Error('Please define the MONGODB_URI environment variable inside .env.local');
 }
 
-export async function connectToDatabase() {
-  if (!process.env.MONGODB_URI) {
-    throw new Error('Please define the MONGODB_URI environment variable inside .env.local');
+let cached = global.mongoose;
+
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
+async function connectDB() {
+  if (cached.conn) {
+    return cached.conn;
   }
 
-  if (global.mongoose.conn) {
-    // Use existing database connection
-    return global.mongoose.conn;
-  }
-
-  if (!global.mongoose.promise) {
+  if (!cached.promise) {
     const opts = {
-      bufferCommands: true,
+      bufferCommands: false,
     };
 
-    global.mongoose.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
+    cached.promise = mongoose.connect(MONGODB_URI, opts);
   }
 
   try {
-    global.mongoose.conn = await global.mongoose.promise;
+    cached.conn = await cached.promise;
   } catch (e) {
-    global.mongoose.promise = null;
+    cached.promise = null;
     throw e;
   }
 
-  return global.mongoose.conn;
+  return cached.conn;
 }
+
+export default connectDB;
 
 // Handle connection errors
 mongoose.connection.on('error', (err) => {

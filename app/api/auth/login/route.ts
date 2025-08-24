@@ -61,8 +61,7 @@ export async function POST(request: NextRequest) {
       { 
         userId: user._id,
         username: user.username,
-        email: user.email,
-        preferredLanguage: user.preferredLanguage
+        email: user.email
       },
       process.env.JWT_SECRET!,
       { expiresIn: '7d' }
@@ -75,7 +74,6 @@ export async function POST(request: NextRequest) {
       id: user._id,
       username: user.username,
       email: user.email,
-      preferredLanguage: user.preferredLanguage,
       createdAt: user.createdAt
     };
 

@@ -2,12 +2,13 @@ export interface User {
   id: string;
   username: string;
   email: string;
-  preferredLanguage: string;
   createdAt: string;
   lastSeen?: string;
   isFavorite?: boolean;
   isConnected?: boolean;
   status?: 'online' | 'offline' | 'away';
+  isOnline?: boolean;
+  lastActivity?: string;
 }
 
 export interface Message {
@@ -20,6 +21,7 @@ export interface Message {
   isRead: boolean;
   deletedFor?: string[]; // Array of user IDs for whom this message is deleted
   deletedForEveryone?: boolean; // Flag to indicate if message is deleted for everyone
+  reactions?: Record<string, string>; // Add reactions field
 }
 
 export interface AuthResponse {
@@ -57,5 +59,4 @@ export interface Connection {
 export interface ProfileUpdateData {
   username?: string;
   email?: string;
-  preferredLanguage?: string;
 }

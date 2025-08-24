@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
 
 const messageSchema = new mongoose.Schema({
-  sender: {
+  senderId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  receiver: {
+  receiverId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
@@ -19,19 +19,22 @@ const messageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  isRead: {
+  isDeleted: {
     type: Boolean,
     default: false
   },
-  // Track which users have deleted this message (for "Delete for Me")
-  deletedFor: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }],
-  // Track if message is deleted for everyone (for "Delete for Everyone")
-  deletedForEveryone: {
-    type: Boolean,
-    default: false
+  deletedFor: {
+    type: [String], // Array of user IDs for whom the message is deleted
+    default: []
+  },
+  // Add reactions field
+  reactions: {
+    type: Map,
+    of: {
+      type: String,
+      enum: ['👍', '❤️', '😂', '😊', '😮', '😢', '😡', '🎉']
+    },
+    default: new Map()
   }
 });
 

@@ -21,16 +21,20 @@ const userSchema = new mongoose.Schema({
     required: true,
     minlength: 6
   },
-  preferredLanguage: {
-    type: String,
-    default: 'en',
-    required: true
-  },
+
   createdAt: {
     type: Date,
     default: Date.now
   },
   lastSeen: {
+    type: Date,
+    default: Date.now
+  },
+  isOnline: {
+    type: Boolean,
+    default: false
+  },
+  lastActivity: {
     type: Date,
     default: Date.now
   }

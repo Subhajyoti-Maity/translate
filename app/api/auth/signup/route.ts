@@ -7,9 +7,9 @@ export async function POST(request: NextRequest) {
   try {
     await connectDB();
 
-    const { username, email, password, preferredLanguage = 'en' } = await request.json();
+    const { username, email, password } = await request.json();
     
-    console.log('📝 Signup attempt:', { username, email, passwordLength: password?.length, preferredLanguage });
+    console.log('📝 Signup attempt:', { username, email, passwordLength: password?.length });
 
     // Validation
     if (!username || !email || !password) {
@@ -49,8 +49,7 @@ export async function POST(request: NextRequest) {
     const user = new User({
       username,
       email,
-      password: hashedPassword,
-      preferredLanguage
+      password: hashedPassword
     });
 
     await user.save();
@@ -61,7 +60,6 @@ export async function POST(request: NextRequest) {
       id: user._id,
       username: user.username,
       email: user.email,
-      preferredLanguage: user.preferredLanguage,
       createdAt: user.createdAt
     };
 

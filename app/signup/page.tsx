@@ -4,27 +4,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-const languages = [
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'it', name: 'Italian' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'ru', name: 'Russian' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'zh', name: 'Chinese' },
-  { code: 'ar', name: 'Arabic' },
-  { code: 'hi', name: 'Hindi' },
-];
+
 
 export default function Signup() {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [preferredLanguage, setPreferredLanguage] = useState('en');
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
@@ -57,7 +44,6 @@ export default function Signup() {
           username,
           email,
           password,
-          preferredLanguage,
         }),
       });
 
@@ -162,24 +148,7 @@ export default function Signup() {
                 placeholder="Confirm your password"
               />
             </div>
-            <div>
-              <label htmlFor="preferredLanguage" className="block text-sm font-medium text-gray-700">
-                Preferred Language
-              </label>
-              <select
-                id="preferredLanguage"
-                name="preferredLanguage"
-                value={preferredLanguage}
-                onChange={(e) => setPreferredLanguage(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-              >
-                {languages.map((lang) => (
-                  <option key={lang.code} value={lang.code}>
-                    {lang.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+
           </div>
 
           {error && (

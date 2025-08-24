@@ -16,6 +16,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState('chat');
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
+  const [onlineUserCount, setOnlineUserCount] = useState(0);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   
   // Socket ref to prevent recreation
   const socketRef = useRef<Socket | null>(null);
@@ -56,6 +58,28 @@ export default function Home() {
     setIsLoading(false);
   }, []);
 
+  // Fetch initial users
+  useEffect(() => {
+    if (user?.id) {
+      const fetchInitialUsers = async () => {
+        try {
+          console.log('🔍 Fetching initial users for user:', user.id);
+          const response = await fetch(`/api/users/search?q=&userId=${user.id}`);
+          const data = await response.json();
+          if (data.users) {
+            console.log('🔍 Initial users fetched:', data.users);
+            console.log('🔍 Users status from API:', data.users.map((u: User) => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
+            console.log('🔍 Setting allUsers to:', data.users);
+            setAllUsers(data.users);
+          }
+        } catch (error) {
+          console.error('Failed to fetch initial users:', error);
+        }
+      };
+      fetchInitialUsers();
+    }
+  }, [user?.id]);
+
   // Initialize socket connection
   useEffect(() => {
     if (!user?.id || isInitializedRef.current) return;
@@ -79,6 +103,11 @@ export default function Home() {
       
       // Join user room
       socket.emit('join-user', user.id);
+      console.log('🔌 Emitted join-user for:', user.id);
+      
+      // Get online status for all users
+      socket.emit('get-online-status');
+      console.log('🔌 Emitted get-online-status');
     });
     
     socket.on('disconnect', () => {
@@ -167,6 +196,87 @@ export default function Home() {
         timestamp: new Date(msg.timestamp)
       })));
     });
+
+    // Handle user status changes (online/offline)
+    socket.on('user-status-changed', (data: { userId: string; status: string; lastActivity: string }) => {
+      console.log('👤 User status changed:', data);
+      
+      // Update selected user status if it's the one that changed
+      if (selectedUser && selectedUser.id === data.userId) {
+        setSelectedUser(prev => prev ? {
+          ...prev,
+          status: data.status as 'online' | 'offline' | 'away',
+          lastActivity: data.lastActivity
+        } : null);
+      }
+    });
+
+    // Handle reaction events
+    socket.on('reaction-added', (data: { messageId: string; reaction: string; userId: string; reactions: Record<string, string> }) => {
+      console.log('🎭 Reaction added:', data);
+      // Update messages with new reactions
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId 
+          ? { ...msg, reactions: data.reactions }
+          : msg
+      ));
+    });
+
+    socket.on('reaction-removed', (data: { messageId: string; userId: string; reactions: Record<string, string> }) => {
+      console.log('🗑️ Reaction removed:', data);
+      // Update messages with updated reactions
+      setMessages(prev => prev.map(msg => 
+        msg.id === data.messageId 
+          ? { ...msg, reactions: data.reactions }
+          : msg
+      ));
+    });
+
+    // Handle online status updates for all users
+    socket.on('online-status-updated', (data: { userStatuses: User[] }) => {
+      console.log('👥 Online status updated for all users:', data.userStatuses.map((u: User) => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
+      console.log('👥 Previous allUsers state:', allUsers.map((u: User) => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
+
+      // Filter out the current user and ensure no duplicates
+      const otherUsers = data.userStatuses.filter(u => u.id !== user?.id);
+      console.log('👥 Filtered other users:', otherUsers.map((u: User) => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
+
+      // Remove duplicates by keeping only unique user IDs
+      const uniqueUsers = otherUsers.filter((user, index, self) =>
+        index === self.findIndex(u => u.id === user.id)
+      );
+
+      setAllUsers(uniqueUsers);
+      console.log('👥 Updated allUsers state to:', uniqueUsers.map((u: User) => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
+
+      if (selectedUser) {
+        const updatedSelectedUser = uniqueUsers.find(u => u.id === selectedUser.id);
+        if (updatedSelectedUser) {
+          setSelectedUser(prev => prev ? {
+            ...prev,
+            status: updatedSelectedUser.status,
+            isOnline: updatedSelectedUser.isOnline,
+            lastActivity: updatedSelectedUser.lastActivity
+          } : null);
+        }
+      }
+      const onlineCount = uniqueUsers.filter(u => u.status === 'online').length;
+      setOnlineUserCount(onlineCount);
+      console.log('👥 Updated online user count to:', onlineCount);
+    });
+
+    // Handle user activity updates
+    socket.on('user-activity-updated', (data: { userId: string; lastActivity: Date }) => {
+      console.log('👤 User activity updated:', data);
+      
+      // Update selected user activity if it's the one that changed
+      if (selectedUser && selectedUser.id === data.userId) {
+        setSelectedUser(prev => prev ? {
+          ...prev,
+          lastActivity: data.lastActivity.toISOString()
+        } : null);
+      }
+    });
     
     // Cleanup function
     return () => {
@@ -175,6 +285,34 @@ export default function Home() {
         socketRef.current = null;
       }
       isInitializedRef.current = false;
+    };
+  }, [user?.id]);
+
+  // Send periodic activity updates to keep user status active
+  useEffect(() => {
+    if (socketRef.current && user?.id) {
+      const interval = setInterval(() => {
+        socketRef.current?.emit('user-activity', user.id);
+      }, 30000); // Send activity update every 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [user?.id]);
+
+  // Handle page unload to mark user as offline
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (socketRef.current && user?.id) {
+        // Send a final activity update before leaving
+        socketRef.current.emit('user-activity', user.id);
+        // The disconnect event will handle marking the user as offline
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [user?.id]);
 
@@ -257,6 +395,63 @@ export default function Home() {
       console.error('Error deleting message:', error);
       alert('An error occurred while deleting the message. Please try again.');
     }
+  };
+
+  const handleReactionToggle = (messageId: string, reaction: string, userId: string) => {
+    console.log('🎭 page.tsx: handleReactionToggle called with:', { messageId, reaction, userId });
+    console.log('🎭 page.tsx: reaction type:', typeof reaction, 'value:', reaction);
+    console.log('🎭 page.tsx: messageId type:', typeof messageId, 'value:', messageId);
+    
+    // Validate inputs
+    if (!messageId || !reaction || !userId) {
+      console.error('❌ Invalid reaction data:', { messageId, reaction, userId });
+      return;
+    }
+    
+    // Validate reaction is a valid emoji
+    const validReactions = ['👍', '❤️', '😂', '😊', '😮', '😢', '😡', '🎉'];
+    if (!validReactions.includes(reaction)) {
+      console.error('❌ Invalid reaction emoji:', reaction);
+      console.error('❌ Expected emoji, got:', reaction);
+      console.error('❌ This suggests a parameter order issue in the call chain');
+      return;
+    }
+    
+    if (socketRef.current) {
+      const currentMessage = messages.find(msg => msg.id === messageId);
+      const currentReaction = currentMessage?.reactions?.[userId];
+      
+      if (currentReaction === reaction) {
+        // Remove reaction
+        socketRef.current.emit('remove-reaction', { messageId, userId });
+        console.log('🗑️ Removing reaction:', { messageId, reaction, userId });
+      } else {
+        // Add/change reaction
+        socketRef.current.emit('add-reaction', { messageId, reaction, userId });
+        console.log('🎭 Adding reaction:', { messageId, reaction, userId });
+      }
+    } else {
+      console.error('❌ Socket not connected');
+    }
+  };
+
+  const handleForwardMessage = (messageId: string, text: string, recipientId: string) => {
+    console.log('📤 page.tsx: handleForwardMessage called with:', { messageId, text, recipientId });
+    
+    if (!user || !socketRef.current) {
+      console.error('❌ User not logged in or socket not connected');
+      return;
+    }
+    
+    // Send forwarded message via socket
+    socketRef.current.emit('send-message', {
+      senderId: user.id,
+      receiverId: recipientId,
+      text: `↪️ Forwarded: ${text}`,
+      tempId: `forward-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    });
+    
+    console.log('📤 Message forwarded successfully:', { messageId, text, recipientId });
   };
 
   const sendMessage = (text: string) => {
@@ -372,6 +567,8 @@ export default function Home() {
             onUserSelect={handleUserSelect} 
             selectedUserId={selectedUser?.id}
             currentUserId={user?.id || ''}
+            socket={socketRef.current}
+            users={allUsers}
           />
         );
       case 'chat':
@@ -381,6 +578,8 @@ export default function Home() {
             onUserSelect={handleUserSelect} 
             selectedUserId={selectedUser?.id}
             currentUserId={user?.id || ''}
+            socket={socketRef.current}
+            users={allUsers}
           />
         );
     }
@@ -416,6 +615,9 @@ export default function Home() {
           messages={messages}
           onSendMessage={sendMessage}
           onDeleteMessage={handleDeleteMessage}
+          onReactionToggle={handleReactionToggle}
+          onForwardMessage={handleForwardMessage}
+          availableUsers={allUsers}
         />
       );
     }
@@ -480,6 +682,10 @@ export default function Home() {
                 <span className="text-blue-500 font-bold">4.</span>
                 <span className="text-sm text-gray-700">Reply to specific messages using the 💬 button</span>
               </div>
+              <div className="flex items-start space-x-3">
+                <span className="text-blue-500 font-bold">5.</span>
+                <span className="text-sm text-gray-700">Forward messages to other users using the 📤 button</span>
+              </div>
             </div>
           </div>
         </div>
@@ -526,7 +732,7 @@ export default function Home() {
       </div>
       
       {/* Left Sidebar - Navigation */}
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} isOnline={user.isOnline} userCount={onlineUserCount} />
 
       {/* Middle Panel - Dynamic based on active tab */}
       {renderMiddlePanel()}

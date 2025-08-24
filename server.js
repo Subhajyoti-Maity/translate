@@ -32,8 +32,16 @@ const User = require('./models/User');
 const Message = require('./models/Message');
 
 // Connect to MongoDB
-connectDB().then(() => {
+connectDB().then(async () => {
   console.log('✅ Connected to MongoDB');
+  
+  // Reset all users to offline when server starts
+  try {
+    await User.updateMany({}, { isOnline: false });
+    console.log('🔄 Reset all users to offline status');
+  } catch (error) {
+    console.error('❌ Error resetting user statuses:', error);
+  }
 }).catch(err => {
   console.error('❌ MongoDB connection error:', err);
   process.exit(1);
@@ -127,6 +135,67 @@ app.prepare().then(() => {
     allowUpgrades: false
   });
 
+  // Helper functions for socket operations
+  // Track connected users
+  const connectedUsers = new Map(); // socketId -> userId
+
+  const broadcastOnlineUserCount = async () => {
+    try {
+      // Only count users who are actually connected via socket
+      const actualOnlineCount = connectedUsers.size;
+      io.emit('online-user-count-updated', { count: actualOnlineCount });
+    } catch (error) {
+      console.error('❌ Error broadcasting online user count:', error);
+    }
+  };
+
+  // Get all connected user IDs
+  const getConnectedUserIds = () => {
+    return Array.from(connectedUsers.values());
+  };
+
+  // Broadcast user status to all clients
+  const broadcastUserStatus = (userId, status, lastActivity) => {
+    io.emit('user-status-changed', {
+      userId: userId,
+      status: status,
+      lastActivity: lastActivity
+    });
+  };
+
+  const checkInactiveUsers = async () => {
+    try {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+      
+      const inactiveUsers = await User.find({
+        isOnline: true,
+        lastActivity: { $lt: fiveMinutesAgo }
+      });
+      
+      if (inactiveUsers.length > 0) {
+        console.log(`🕐 Found ${inactiveUsers.length} inactive users, marking as offline`);
+        
+        for (const user of inactiveUsers) {
+          await User.findByIdAndUpdate(user._id, {
+            isOnline: false
+          });
+          
+          // Broadcast status change
+          io.emit('user-status-changed', {
+            userId: user._id.toString(),
+            status: 'offline',
+            lastActivity: user.lastActivity
+          });
+        }
+        
+        // Broadcast updated online user count
+        await broadcastOnlineUserCount();
+      }
+    } catch (error) {
+      console.error('❌ Error checking inactive users:', error);
+    }
+  };
+
   // Socket.io connection handling
   io.on('connection', (socket) => {
     console.log('👤 User connected:', socket.id);
@@ -137,6 +206,9 @@ app.prepare().then(() => {
       remoteAddress: socket.handshake.address,
       userAgent: socket.handshake.headers['user-agent']
     });
+
+    // Set up periodic check for inactive users
+    const inactiveCheckInterval = setInterval(checkInactiveUsers, 60000); // Check every minute
 
     // Handle connection errors
     socket.on('error', (error) => {
@@ -149,8 +221,49 @@ app.prepare().then(() => {
     });
 
     // Handle disconnection
-    socket.on('disconnect', (reason) => {
+    socket.on('disconnect', async (reason) => {
       console.log('👋 User disconnected:', socket.id, 'Reason:', reason);
+      
+      // Clear the inactive check interval
+      clearInterval(inactiveCheckInterval);
+      
+      // Remove user from connected users map
+      if (socket.userId) {
+        connectedUsers.delete(socket.id);
+        
+        console.log(`🔗 User ${socket.userId} removed from connected users map`);
+        console.log(`📊 Total connected users: ${connectedUsers.size}`);
+        console.log(`🔗 Connected user IDs: ${Array.from(connectedUsers.values())}`);
+        
+        // Update user status to offline when they disconnect
+        try {
+          await User.findByIdAndUpdate(socket.userId, {
+            isOnline: false,
+            lastActivity: new Date()
+          });
+          
+          // Broadcast to all other users that this user is now offline
+          socket.broadcast.emit('user-status-changed', {
+            userId: socket.userId,
+            status: 'offline',
+            lastActivity: new Date()
+          });
+          
+          // Also emit to the user who disconnected to confirm their status
+          socket.emit('user-status-changed', {
+            userId: socket.userId,
+            status: 'offline',
+            lastActivity: new Date()
+          });
+          
+          // Broadcast updated online user count
+          await broadcastOnlineUserCount();
+          
+          console.log(`👤 User ${socket.userId} marked as offline`);
+        } catch (error) {
+          console.error('❌ Error updating user offline status:', error);
+        }
+      }
     });
 
     // Handle transport errors
@@ -161,7 +274,7 @@ app.prepare().then(() => {
         message: error.message || 'No message',
         code: error.code || 'No code',
         transport: socket.conn.transport.name,
-        readyState: socket.conn.readyState
+        readyState: socket.conn.transport.readyState
       });
       
       // If it's a critical transport error, try to recover
@@ -215,13 +328,49 @@ app.prepare().then(() => {
     });
 
     // Join user to their personal room
-    socket.on('join-user', (userId) => {
+    socket.on('join-user', async (userId) => {
       socket.join(userId);
       console.log(`🏠 User ${userId} joined room using socket ${socket.id}`);
       console.log(`👥 Users in room ${userId}:`, io.sockets.adapter.rooms.get(userId)?.size || 0);
       
       // Store user ID in socket for easier debugging
       socket.userId = userId;
+      
+      // Track this user as connected
+      connectedUsers.set(socket.id, userId);
+      
+      console.log(`🔗 User ${userId} added to connected users map`);
+      console.log(`📊 Total connected users: ${connectedUsers.size}`);
+      console.log(`🔗 Connected user IDs: ${Array.from(connectedUsers.values())}`);
+      
+      // Update user status to online when they join
+      try {
+        await User.findByIdAndUpdate(userId, {
+          isOnline: true,
+          lastActivity: new Date()
+        });
+        
+        // Broadcast to all other users that this user is now online
+        socket.broadcast.emit('user-status-changed', {
+          userId: userId,
+          status: 'online',
+          lastActivity: new Date()
+        });
+        
+        // Also emit to the user who joined to confirm their status
+        socket.emit('user-status-changed', {
+          userId: userId,
+          status: 'online',
+          lastActivity: new Date()
+        });
+        
+        // Broadcast updated online user count
+        await broadcastOnlineUserCount();
+        
+        console.log(`👤 User ${userId} marked as online`);
+      } catch (error) {
+        console.error('❌ Error updating user online status:', error);
+      }
       
       // Confirm room join to client
       socket.emit('room-joined', {
@@ -231,11 +380,33 @@ app.prepare().then(() => {
       });
     });
 
+    // Handle user activity updates (heartbeat)
+    socket.on('user-activity', async (userId) => {
+      try {
+        await User.findByIdAndUpdate(userId, {
+          lastActivity: new Date()
+        });
+        
+        // Broadcast activity update to other users
+        socket.broadcast.emit('user-activity-updated', {
+          userId: userId,
+          lastActivity: new Date()
+        });
+      } catch (error) {
+        console.error('❌ Error updating user activity:', error);
+      }
+    });
+
     // Handle sending messages
     socket.on('send-message', async (data) => {
       try {
         const { senderId, receiverId, text } = data;
         console.log('📨 Received message:', data);
+
+        // Update sender's last activity
+        await User.findByIdAndUpdate(senderId, {
+          lastActivity: new Date()
+        });
 
         // Save message to database
         const message = new Message({
@@ -528,6 +699,150 @@ app.prepare().then(() => {
       } catch (error) {
         console.error('❌ Error getting messages:', error);
         socket.emit('error', 'Failed to load messages');
+      }
+    });
+
+    // Handle request for current online status of all users
+    socket.on('get-online-status', async () => {
+      try {
+        console.log('📊 Client requested online status');
+        console.log('🔗 Currently connected users:', Array.from(connectedUsers.values()));
+        
+        // Get all users from database
+        const allUsers = await User.find({}).select('_id username email isOnline lastActivity');
+        
+        // Create a set of connected user IDs for quick lookup
+        const connectedUserIds = new Set(connectedUsers.values());
+        
+        console.log('👥 All users in database:', allUsers.length);
+        console.log('🔗 Connected user IDs:', Array.from(connectedUserIds));
+        
+        // Transform users with actual online status
+        const userStatuses = allUsers.map(user => {
+          const userId = user._id.toString();
+          const isActuallyOnline = connectedUserIds.has(userId);
+          
+          console.log(`👤 User ${user.username} (${userId}): isOnline=${user.isOnline}, actuallyConnected=${isActuallyOnline}`);
+          
+          return {
+            id: userId,
+            username: user.username,
+            email: user.email,
+            isOnline: isActuallyOnline, // Only true if actually connected via socket
+            lastActivity: user.lastActivity || user.lastSeen,
+            status: isActuallyOnline ? 'online' : 'offline'
+          };
+        });
+        
+        console.log('📊 Sending user statuses:', userStatuses.map(u => `${u.username}: ${u.status}`));
+        
+        // Send current status to the requesting client
+        socket.emit('online-status-updated', { userStatuses });
+        
+      } catch (error) {
+        console.error('❌ Error getting online status:', error);
+        socket.emit('error', 'Failed to get online status');
+      }
+    });
+
+    // Handle message reactions
+    socket.on('add-reaction', async (data) => {
+      try {
+        const { messageId, reaction, userId } = data;
+        console.log('🎭 Adding reaction:', { messageId, reaction, userId });
+
+        // Validate input data
+        if (!messageId || !reaction || !userId) {
+          console.error('❌ Invalid reaction data:', { messageId, reaction, userId });
+          return;
+        }
+
+        // Validate reaction is a valid emoji
+        const validReactions = ['👍', '❤️', '😂', '😊', '😮', '😢', '😡', '🎉'];
+        if (!validReactions.includes(reaction)) {
+          console.error('❌ Invalid reaction emoji:', reaction);
+          return;
+        }
+
+        // Update message with reaction
+        const result = await Message.findByIdAndUpdate(
+          messageId,
+          { [`reactions.${userId}`]: reaction },
+          { new: true }
+        );
+
+        if (result) {
+          // Emit reaction added to both sender and receiver
+          const message = await Message.findById(messageId);
+          if (message && message.senderId && message.receiverId) {
+            const senderId = message.senderId.toString();
+            const receiverId = message.receiverId.toString();
+            
+            const reactionData = {
+              messageId,
+              reaction,
+              userId,
+              reactions: Object.fromEntries(message.reactions || new Map())
+            };
+            
+            console.log('📡 Emitting reaction-added to sender:', senderId, reactionData);
+            io.to(senderId).emit('reaction-added', reactionData);
+            
+            if (senderId !== receiverId) {
+              console.log('📡 Emitting reaction-added to receiver:', receiverId, reactionData);
+              io.to(receiverId).emit('reaction-added', reactionData);
+            }
+          }
+          console.log('✅ Reaction added successfully');
+        }
+      } catch (error) {
+        console.error('❌ Error adding reaction:', error);
+      }
+    });
+
+    socket.on('remove-reaction', async (data) => {
+      try {
+        const { messageId, userId } = data;
+        console.log('🗑️ Removing reaction:', { messageId, userId });
+
+        // Validate input data
+        if (!messageId || !userId) {
+          console.error('❌ Invalid remove reaction data:', { messageId, userId });
+          return;
+        }
+
+        // Remove reaction from message
+        const result = await Message.findByIdAndUpdate(
+          messageId,
+          { $unset: { [`reactions.${userId}`]: 1 } },
+          { new: true }
+        );
+
+        if (result) {
+          // Emit reaction removed to both sender and receiver
+          const message = await Message.findById(messageId);
+          if (message && message.senderId && message.receiverId) {
+            const senderId = message.senderId.toString();
+            const receiverId = message.receiverId.toString();
+            
+            const reactionData = {
+              messageId,
+              userId,
+              reactions: Object.fromEntries(message.reactions || new Map())
+            };
+            
+            console.log('📡 Emitting reaction-removed to sender:', senderId, reactionData);
+            io.to(senderId).emit('reaction-removed', reactionData);
+            
+            if (senderId !== receiverId) {
+              console.log('📡 Emitting reaction-removed to receiver:', receiverId, reactionData);
+              io.to(receiverId).emit('reaction-removed', reactionData);
+            }
+          }
+          console.log('✅ Reaction removed successfully');
+        }
+      } catch (error) {
+        console.error('❌ Error removing reaction:', error);
       }
     });
   });

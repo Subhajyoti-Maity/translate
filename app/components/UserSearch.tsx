@@ -74,9 +74,7 @@ export default function UserSearch({ onUserSelect, currentUserId }: UserSearchPr
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="font-medium text-gray-900">{user.username}</h3>
-                    <p className="text-sm text-gray-500">
-                      Language: {user.preferredLanguage}
-                    </p>
+
                   </div>
                   <div className="text-xs text-gray-400">
                     {user.lastSeen ? (

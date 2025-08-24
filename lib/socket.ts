@@ -6,11 +6,7 @@ import Message from '../models/Message';
 import User from '../models/User';
 
 export interface NextApiResponseServerIO extends NextApiResponse {
-  socket: {
-    server: NetServer & {
-      io: SocketIOServer;
-    };
-  };
+  socket: any;
 }
 
 export const config = {

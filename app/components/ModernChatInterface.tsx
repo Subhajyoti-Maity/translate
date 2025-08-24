@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { User, Message } from '../../types';
+import ReactionBar from './ReactionBar';
 
 interface ModernChatInterfaceProps {
   user: User;
@@ -9,6 +10,9 @@ interface ModernChatInterfaceProps {
   messages: Message[];
   onSendMessage: (text: string) => void;
   onDeleteMessage?: (messageId: string, deleteType: 'for-me' | 'for-everyone') => void;
+  onReactionToggle?: (messageId: string, reaction: string, userId: string) => void;
+  onForwardMessage?: (messageId: string, text: string, recipientId: string) => void;
+  availableUsers?: Array<{ id: string; username: string; email: string }>;
 }
 
 export default function ModernChatInterface({ 
@@ -16,7 +20,10 @@ export default function ModernChatInterface({
   selectedUser, 
   messages, 
   onSendMessage, 
-  onDeleteMessage 
+  onDeleteMessage,
+  onReactionToggle,
+  onForwardMessage,
+  availableUsers = []
 }: ModernChatInterfaceProps) {
   const [newMessage, setNewMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -24,6 +31,8 @@ export default function ModernChatInterface({
   const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotification, setShowNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [showForwardModal, setShowForwardModal] = useState<string | null>(null);
+  const [selectedRecipient, setSelectedRecipient] = useState<string>('');
   
   // Debug logging removed for cleaner console
   const [isTyping, setIsTyping] = useState(false);
@@ -102,6 +111,24 @@ export default function ModernChatInterface({
     if (newMessage.trim()) {
       onSendMessage(newMessage.trim());
       setNewMessage('');
+    }
+  };
+
+  const handleReactionToggle = (messageId: string, reaction: string, userId: string) => {
+    if (onReactionToggle) {
+      onReactionToggle(messageId, reaction, userId);
+    }
+  };
+
+  const handleForwardMessage = () => {
+    if (selectedRecipient && showForwardModal && onForwardMessage) {
+      const messageToForward = messages.find(m => m.id === showForwardModal);
+      if (messageToForward) {
+        onForwardMessage(showForwardModal, messageToForward.text, selectedRecipient);
+        setShowForwardModal(null);
+        setSelectedRecipient('');
+        showNotificationMessage('success', 'Message forwarded successfully!');
+      }
     }
   };
 
@@ -398,12 +425,7 @@ export default function ModernChatInterface({
                               )}
                             </div>
                             
-                            {/* Quick Reactions */}
-                            <div className="flex items-center space-x-1">
-                              <button className="text-xs hover:scale-110 transition-transform p-1 rounded hover:bg-gray-100" title="Like">👍</button>
-                              <button className="text-xs hover:scale-110 transition-transform p-1 rounded hover:bg-gray-100" title="Love">❤️</button>
-                              <button className="text-xs hover:scale-110 transition-transform p-1 rounded hover:bg-gray-100" title="Laugh">😂</button>
-                            </div>
+                            {/* Quick Reactions - Removed duplicate */}
                           </div>
                         )}
                         
@@ -438,8 +460,12 @@ export default function ModernChatInterface({
                             <button
                               onClick={() => {
                                 console.log('📤 Forward message:', message.id);
-                                // TODO: Implement forward functionality
-                                alert('Forward feature coming soon!');
+                                if (onForwardMessage) {
+                                  // Show forward modal
+                                  setShowForwardModal(message.id);
+                                } else {
+                                  showNotificationMessage('error', 'Forward function not available!');
+                                }
                               }}
                               className="text-xs text-green-500 hover:text-green-700 transition-all duration-200 p-2 rounded-lg border border-green-200 hover:bg-green-50 hover:shadow-sm"
                               title="Forward this message"
@@ -471,17 +497,14 @@ export default function ModernChatInterface({
                             </button>
                             
                             {/* Reactions Button */}
-                            <button
-                              onClick={() => {
-                                console.log('😊 Add reaction to message:', message.id);
-                                // TODO: Implement reactions functionality
-                                alert('Reactions feature coming soon!');
-                              }}
-                              className="text-xs text-yellow-500 hover:text-yellow-700 transition-all duration-200 p-2 rounded-lg border border-yellow-200 hover:bg-yellow-50 hover:shadow-sm"
-                              title="Add reaction"
-                            >
-                              😊
-                            </button>
+                            <div className="inline-block">
+                              <ReactionBar
+                                messageId={message.id}
+                                userId={user.id}
+                                currentReactions={message.reactions || {}}
+                                onReactionToggle={handleReactionToggle}
+                              />
+                            </div>
                             
                             {/* Delete Button */}
                             <button
@@ -749,6 +772,63 @@ export default function ModernChatInterface({
           </div>
         )}
       </div>
+
+      {/* Forward Modal */}
+      {showForwardModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold mb-4">Forward Message</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Recipient
+              </label>
+              <select
+                value={selectedRecipient}
+                onChange={(e) => setSelectedRecipient(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Choose a user...</option>
+                {availableUsers.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.username} ({user.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-4 p-3 bg-gray-50 rounded-md">
+              <p className="text-sm text-gray-600 mb-1">Message to forward:</p>
+              <p className="text-sm font-medium">
+                {messages.find(m => m.id === showForwardModal)?.text || ''}
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowForwardModal(null);
+                  setSelectedRecipient('');
+                }}
+                className="px-4 py-2 text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleForwardMessage}
+                disabled={!selectedRecipient}
+                className={`px-4 py-2 rounded-md transition-colors ${
+                  selectedRecipient
+                    ? 'bg-blue-500 text-white hover:bg-blue-600'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                Forward
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

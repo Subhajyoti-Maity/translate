@@ -6,9 +6,10 @@ interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   userCount?: number;
+  isOnline?: boolean;
 }
 
-export default function Sidebar({ activeTab, onTabChange, userCount = 0 }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange, userCount = 0, isOnline }: SidebarProps) {
   const tabs = [
     { id: 'chat', icon: '💬', label: 'Chat' },
     { id: 'connections', icon: '🔗', label: 'Connections' },
@@ -19,10 +20,14 @@ export default function Sidebar({ activeTab, onTabChange, userCount = 0 }: Sideb
   return (
     <div className="w-16 bg-white border-r border-gray-200 flex flex-col items-center py-6 shadow-lg">
       {/* Logo */}
-      <div className="mb-8">
+      <div className="mb-8 relative">
         <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg hover:shadow-xl transition-shadow duration-200">
           C
         </div>
+        {/* Online Status Indicator */}
+        <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-white ${
+          isOnline ? 'bg-green-400' : 'bg-gray-400'
+        }`} title={isOnline ? 'Online' : 'Offline'}></div>
       </div>
 
       {/* Navigation Tabs */}

@@ -43,7 +43,6 @@ export async function GET(request: NextRequest) {
       id: user._id,
       username: user.username,
       email: user.email,
-      preferredLanguage: user.preferredLanguage,
       createdAt: user.createdAt,
       lastSeen: user.lastSeen
     };
@@ -93,7 +92,7 @@ export async function PUT(request: NextRequest) {
     console.log('📝 Update data received:', updateData);
 
     // Validate update data
-    const allowedFields = ['username', 'email', 'preferredLanguage'];
+    const allowedFields = ['username', 'email'];
     const filteredData: any = {};
     
     console.log('🔍 Validating update data...');
@@ -160,7 +159,6 @@ export async function PUT(request: NextRequest) {
       id: updatedUser._id,
       username: updatedUser.username,
       email: updatedUser.email,
-      preferredLanguage: updatedUser.preferredLanguage,
       createdAt: updatedUser.createdAt,
       lastSeen: updatedUser.lastSeen
     };

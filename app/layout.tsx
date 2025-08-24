@@ -2,10 +2,10 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Chat Translate - Real-time Multilingual Chat App",
-  description: "A Next.js real-time chat application with automatic language translation powered by Google Translate API",
-  keywords: ["chat", "translation", "multilingual", "real-time", "nextjs", "socket.io"],
-  authors: [{ name: "Chat Translate Team" }],
+  title: "Real-time Chat Application",
+  description: "A Next.js real-time chat application with modern features",
+  keywords: ["chat", "real-time", "nextjs", "socket.io", "messaging"],
+  authors: [{ name: "Chat App Team" }],
 };
 
 export const viewport: Viewport = {

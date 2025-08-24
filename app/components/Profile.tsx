@@ -9,14 +9,13 @@ interface ProfileProps {
   onRefresh?: () => void;
 }
 
-export default function Profile({ user, onProfileUpdate }: ProfileProps) {
+export default function Profile({ user, onProfileUpdate, onRefresh }: ProfileProps) {
   console.log('👤 Profile component received user:', user);
   
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<ProfileUpdateData>({
     username: user.username,
-    email: user.email,
-    preferredLanguage: user.preferredLanguage
+    email: user.email
   });
 
   const handleSave = async () => {
@@ -66,8 +65,7 @@ export default function Profile({ user, onProfileUpdate }: ProfileProps) {
   const handleCancel = () => {
     setEditData({
       username: user.username,
-      email: user.email,
-      preferredLanguage: user.preferredLanguage
+      email: user.email
     });
     setIsEditing(false);
   };
@@ -113,18 +111,7 @@ export default function Profile({ user, onProfileUpdate }: ProfileProps) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Email"
                 />
-                <select
-                  value={editData.preferredLanguage}
-                  onChange={(e) => setEditData({...editData, preferredLanguage: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="en">English</option>
-                  <option value="es">Spanish</option>
-                  <option value="fr">French</option>
-                  <option value="de">German</option>
-                  <option value="zh">Chinese</option>
-                  <option value="ja">Japanese</option>
-                </select>
+
               </div>
             ) : (
               <div>
@@ -135,20 +122,7 @@ export default function Profile({ user, onProfileUpdate }: ProfileProps) {
 
             <div className="bg-gray-50 rounded-xl p-4">
               <div className="text-left space-y-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    Preferred Language
-                  </label>
-                  <p className="text-sm text-gray-900 mt-1">
-                    {user.preferredLanguage === 'en' ? 'English' :
-                     user.preferredLanguage === 'es' ? 'Spanish' :
-                     user.preferredLanguage === 'fr' ? 'French' :
-                     user.preferredLanguage === 'de' ? 'German' :
-                     user.preferredLanguage === 'zh' ? 'Chinese' :
-                     user.preferredLanguage === 'ja' ? 'Japanese' :
-                     user.preferredLanguage}
-                  </p>
-                </div>
+
                 
                 <div>
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">

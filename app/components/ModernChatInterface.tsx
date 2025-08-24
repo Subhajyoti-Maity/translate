@@ -47,6 +47,27 @@ export default function ModernChatInterface({
   // Function to handle delete for everyone
   const handleDeleteForEveryone = (messageId: string) => {
     console.log('🌍 Delete for everyone button clicked for message:', messageId);
+    
+    // Find the message to check if user is the sender
+    const message = messages.find(m => m.id === messageId);
+    if (!message) {
+      console.error('❌ Message not found for deletion:', messageId);
+      showNotificationMessage('error', 'Message not found!');
+      return;
+    }
+    
+    // Validate that the current user is the sender of the message
+    if (message.sender !== user?.id) {
+      console.warn('⚠️ Unauthorized delete for everyone attempt:', {
+        messageSender: message.sender,
+        currentUser: user?.id,
+        messageId
+      });
+      showNotificationMessage('error', 'Only the message sender can delete for everyone!');
+      setShowDeleteConfirm(null);
+      return;
+    }
+    
     console.log('🔍 Message details:', {
       messageId,
       onDeleteMessage: !!onDeleteMessage,
@@ -78,6 +99,28 @@ export default function ModernChatInterface({
   // Function to handle delete for me
   const handleDeleteForMe = (messageId: string) => {
     console.log('👁️ Delete for me button clicked for message:', messageId);
+    
+    // Find the message to check if user is involved
+    const message = messages.find(m => m.id === messageId);
+    if (!message) {
+      console.error('❌ Message not found for deletion:', messageId);
+      showNotificationMessage('error', 'Message not found!');
+      return;
+    }
+    
+    // Validate that the current user is either sender or receiver
+    if (message.sender !== user?.id && message.receiver !== user?.id) {
+      console.warn('⚠️ Unauthorized delete for me attempt:', {
+        messageSender: message.sender,
+        messageReceiver: message.receiver,
+        currentUser: user?.id,
+        messageId
+      });
+      showNotificationMessage('error', 'You can only delete messages you sent or received!');
+      setShowDeleteConfirm(null);
+      return;
+    }
+    
     setDeletingMessage(messageId);
     
     // Show loading state
@@ -506,30 +549,32 @@ export default function ModernChatInterface({
                               />
                             </div>
                             
-                            {/* Delete Button */}
-                            <button
-                              onClick={() => {
-                                console.log('🗑️ DELETE BUTTON CLICKED!');
-                                console.log('🗑️ Delete button clicked for message:', {
-                                  messageId: message.id,
-                                  isOwnMessage,
-                                  sender: message.sender,
-                                  receiver: message.receiver,
-                                  currentUser: user?.id,
-                                  onDeleteMessage: !!onDeleteMessage,
-                                  messageText: message.text
-                                });
-                                setShowDeleteConfirm(message.id);
-                              }}
-                              className={`text-xs text-red-500 hover:text-red-700 transition-all duration-200 p-2 rounded-lg border font-medium hover:scale-105 ${
-                                isOwnMessage 
-                                  ? 'bg-red-50 hover:bg-red-100 border-red-200 hover:border-red-300 hover:shadow-sm' 
-                                  : 'bg-orange-50 hover:bg-orange-100 border-orange-200 hover:border-orange-300 hover:shadow-sm'
-                              }`}
-                              title={isOwnMessage ? "Delete message (3 options)" : "Hide message (2 options)"}
-                            >
-                              {isOwnMessage ? '🗑️' : '👁️'}
-                            </button>
+                            {/* Delete Button - Only show for messages user can delete */}
+                            {(message.sender === user.id || message.receiver === user.id) && (
+                              <button
+                                onClick={() => {
+                                  console.log('🗑️ DELETE BUTTON CLICKED!');
+                                  console.log('🗑️ Delete button clicked for message:', {
+                                    messageId: message.id,
+                                    isOwnMessage,
+                                    sender: message.sender,
+                                    receiver: message.receiver,
+                                    currentUser: user?.id,
+                                    onDeleteMessage: !!onDeleteMessage,
+                                    messageText: message.text
+                                  });
+                                  setShowDeleteConfirm(message.id);
+                                }}
+                                className={`text-xs text-red-500 hover:text-red-700 transition-all duration-200 p-2 rounded-lg border font-medium hover:scale-105 ${
+                                  isOwnMessage 
+                                    ? 'bg-red-50 hover:bg-red-100 border-red-200 hover:border-red-300 hover:shadow-sm' 
+                                    : 'bg-orange-50 hover:bg-orange-100 border-orange-200 hover:border-orange-300 hover:shadow-sm'
+                                }`}
+                                title={isOwnMessage ? "Delete message (3 options)" : "Hide message (2 options)"}
+                              >
+                                {isOwnMessage ? '🗑️' : '👁️'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -540,13 +585,13 @@ export default function ModernChatInterface({
                           <div className="inline-flex flex-col space-y-2 bg-white border border-gray-200 rounded-lg px-4 py-3 min-w-[280px] shadow-lg">
                             <div className="text-center">
                               <span className="text-sm text-gray-800 font-medium">
-                                {isOwnMessage ? 'Delete this message?' : 'Hide this message?'}
+                                {isOwnMessage && message.sender === user.id ? 'Delete this message?' : 'Hide this message?'}
                               </span>
                             </div>
                             
                             <div className="space-y-2">
-                              {isOwnMessage ? (
-                                // SENDER OPTIONS: 3 choices
+                              {isOwnMessage && message.sender === user.id ? (
+                                // SENDER OPTIONS: Only show "Delete for everyone" to the actual sender
                                 <>
                                   <button
                                     onClick={() => {
@@ -584,7 +629,7 @@ export default function ModernChatInterface({
                                   </button>
                                 </>
                               ) : (
-                                // RECEIVER OPTIONS: 2 choices
+                                // RECEIVER OPTIONS: Only show "Delete for me" to receivers
                                 <button
                                   onClick={() => handleDeleteForMe(message.id)}
                                   disabled={deletingMessage === message.id}
@@ -613,7 +658,7 @@ export default function ModernChatInterface({
                             
                             {/* Enhanced Help text */}
                             <div className="text-xs text-gray-500 text-center px-2 pt-2 border-t border-gray-100">
-                              {isOwnMessage ? (
+                              {isOwnMessage && message.sender === user.id ? (
                                 <>
                                   <p className="mb-1"><strong className="text-red-600">🌍 Delete for everyone:</strong> Removes message completely for all users (like WhatsApp)</p>
                                   <p><strong className="text-blue-600">👁️ Delete for me:</strong> Only you won't see it (receiver still can)</p>

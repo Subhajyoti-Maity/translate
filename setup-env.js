@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-console.log('🔧 Setting up environment variables for Chat Translate...\n');
+console.log('🔧 Setting up environment variables for Chat App...\n');
 
 // Check if .env.local already exists
 const envPath = path.join(__dirname, '.env.local');
@@ -14,7 +14,7 @@ if (fs.existsSync(envPath)) {
 }
 
 // Create .env.local with template
-const envContent = `MONGODB_URI=mongodb+srv://yourusername:yourpassword@cluster.mongodb.net/chat_translate?retryWrites=true&w=majority
+const envContent = `MONGODB_URI=mongodb+srv://yourusername:yourpassword@cluster.mongodb.net/chat_app?retryWrites=true&w=majority
 JWT_SECRET=1525d3760809e2293a873d1837b2131d3830913684598536e2847df566dd578b`;
 
 fs.writeFileSync(envPath, envContent);

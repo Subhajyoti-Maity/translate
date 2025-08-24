@@ -235,34 +235,46 @@ app.prepare().then(() => {
         console.log(`📊 Total connected users: ${connectedUsers.size}`);
         console.log(`🔗 Connected user IDs: ${Array.from(connectedUsers.values())}`);
         
-        // Update user status to offline when they disconnect
+        // Check if user has other active connections
+        const userStillHasConnections = Array.from(connectedUsers.values()).includes(socket.userId);
+        
+        if (!userStillHasConnections) {
+          // User has no more active connections, mark as offline
+          try {
+            await User.findByIdAndUpdate(socket.userId, {
+              isOnline: false,
+              lastActivity: new Date()
+            });
+            
+            // Broadcast to all other users that this user is now offline
+            socket.broadcast.emit('user-status-changed', {
+              userId: socket.userId,
+              status: 'offline',
+              lastActivity: new Date()
+            });
+            
+            console.log(`👤 User ${socket.userId} marked as offline (no more connections)`);
+          } catch (error) {
+            console.error('❌ Error updating user offline status:', error);
+          }
+        } else {
+          console.log(`👤 User ${socket.userId} still has other active connections, keeping online status`);
+        }
+        
+        // Always update last activity
         try {
           await User.findByIdAndUpdate(socket.userId, {
-            isOnline: false,
             lastActivity: new Date()
           });
-          
-          // Broadcast to all other users that this user is now offline
-          socket.broadcast.emit('user-status-changed', {
-            userId: socket.userId,
-            status: 'offline',
-            lastActivity: new Date()
-          });
-          
-          // Also emit to the user who disconnected to confirm their status
-          socket.emit('user-status-changed', {
-            userId: socket.userId,
-            status: 'offline',
-            lastActivity: new Date()
-          });
-          
-          // Broadcast updated online user count
-          await broadcastOnlineUserCount();
-          
-          console.log(`👤 User ${socket.userId} marked as offline`);
         } catch (error) {
-          console.error('❌ Error updating user offline status:', error);
+          console.error('❌ Error updating user last activity:', error);
         }
+        
+        // Broadcast updated online user count
+        await broadcastOnlineUserCount();
+        
+        // Force all clients to refresh their status
+        io.emit('force-status-refresh');
       }
     });
 
@@ -336,26 +348,41 @@ app.prepare().then(() => {
       // Store user ID in socket for easier debugging
       socket.userId = userId;
       
-      // Track this user as connected
+      // Track this user as connected (allow multiple connections)
       connectedUsers.set(socket.id, userId);
       
       console.log(`🔗 User ${userId} added to connected users map`);
       console.log(`📊 Total connected users: ${connectedUsers.size}`);
       console.log(`🔗 Connected user IDs: ${Array.from(connectedUsers.values())}`);
       
-      // Update user status to online when they join
+      // Update user status to online when they join (don't override if already online)
       try {
-        await User.findByIdAndUpdate(userId, {
-          isOnline: true,
-          lastActivity: new Date()
-        });
-        
-        // Broadcast to all other users that this user is now online
-        socket.broadcast.emit('user-status-changed', {
-          userId: userId,
-          status: 'online',
-          lastActivity: new Date()
-        });
+        const user = await User.findById(userId);
+        if (user) {
+          // Only update if not already online or if this is a new session
+          if (!user.isOnline) {
+            await User.findByIdAndUpdate(userId, {
+              isOnline: true,
+              lastActivity: new Date()
+            });
+            
+            // Broadcast to all other users that this user is now online
+            socket.broadcast.emit('user-status-changed', {
+              userId: userId,
+              status: 'online',
+              lastActivity: new Date()
+            });
+            
+            console.log(`👤 User ${userId} marked as online`);
+          } else {
+            console.log(`👤 User ${userId} already online, updating activity only`);
+          }
+          
+          // Always update last activity
+          await User.findByIdAndUpdate(userId, {
+            lastActivity: new Date()
+          });
+        }
         
         // Also emit to the user who joined to confirm their status
         socket.emit('user-status-changed', {
@@ -367,7 +394,9 @@ app.prepare().then(() => {
         // Broadcast updated online user count
         await broadcastOnlineUserCount();
         
-        console.log(`👤 User ${userId} marked as online`);
+        // Force all clients to refresh their status
+        io.emit('force-status-refresh');
+        
       } catch (error) {
         console.error('❌ Error updating user online status:', error);
       }
@@ -463,7 +492,8 @@ app.prepare().then(() => {
             console.log('⚠️ This appears to be a temporary message ID, cannot delete');
             socket.emit('delete-error', {
               messageId: messageId,
-              error: 'Cannot delete temporary message. Please wait for message confirmation.'
+              error: 'Cannot delete temporary message. Please wait for message confirmation.',
+              errorType: 'temporary_message'
             });
           } else {
             // Try to find the message with different ID formats
@@ -483,7 +513,8 @@ app.prepare().then(() => {
             
             socket.emit('delete-error', {
               messageId: messageId,
-              error: 'Message not found. It may have been already deleted or is not in this conversation.'
+              error: 'Message not found. It may have been already deleted or is not in this conversation.',
+              errorType: 'message_not_found'
             });
           }
           return;
@@ -498,10 +529,11 @@ app.prepare().then(() => {
           console.log('❌ Requested by:', senderId);
           console.log('❌ Authorization failed - only message sender can delete for everyone');
           
-          // Emit error to the client
+          // Emit a more specific error type for authorization issues
           socket.emit('delete-error', {
             messageId: messageId,
             error: 'Only the message sender can delete this message for everyone',
+            errorType: 'authorization',
             senderId: message.sender.toString(),
             requestedBy: senderId
           });
@@ -516,6 +548,7 @@ app.prepare().then(() => {
           socket.emit('delete-error', {
             messageId: messageId,
             error: 'Message is already deleted for everyone',
+            errorType: 'already_deleted',
             alreadyDeleted: true
           });
           return;
@@ -527,6 +560,7 @@ app.prepare().then(() => {
           socket.emit('delete-error', {
             messageId: messageId,
             error: 'Message is already deleted for you',
+            errorType: 'already_deleted',
             alreadyDeleted: true
           });
           return;

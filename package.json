@@ -6,6 +6,7 @@
     "setup": "node setup-env.js",
     "dev": "next dev --turbopack",
     "dev:socket": "cross-env SOCKET_PORT=3006 node server.js",
+    "start:all": "npm run dev & npm run dev:socket",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

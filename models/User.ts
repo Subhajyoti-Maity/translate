@@ -37,6 +37,18 @@ const userSchema = new mongoose.Schema({
   lastActivity: {
     type: Date,
     default: Date.now
+  },
+  // Support multiple sessions
+  activeSessions: [{
+    sessionId: String,
+    deviceInfo: String,
+    lastActivity: Date,
+    createdAt: Date
+  }],
+  // Allow multiple logins
+  allowMultipleLogins: {
+    type: Boolean,
+    default: true
   }
 });
 

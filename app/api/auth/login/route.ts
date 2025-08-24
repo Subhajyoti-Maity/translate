@@ -1,14 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import connectDB from '@/lib/mongodb';
 import User from '@/models/User';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔐 Login API called');
+    
+    // Connect to database
+    console.log('🔌 Connecting to database...');
     await connectDB();
-
-    const { usernameOrEmail, password } = await request.json();
+    console.log('✅ Database connected');
+    
+    // Parse request body
+    const body = await request.json();
+    console.log('📨 Request body received:', { 
+      hasUsernameOrEmail: !!body.usernameOrEmail, 
+      hasPassword: !!body.password,
+      usernameOrEmail: body.usernameOrEmail,
+      passwordLength: body.password?.length 
+    });
+    
+    const { usernameOrEmail, password } = body;
     
     console.log('🔐 Login attempt:', { usernameOrEmail, passwordLength: password?.length });
     console.log('🔑 JWT_SECRET exists:', !!process.env.JWT_SECRET);
@@ -23,6 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Find user by username or email
+    console.log('🔍 Searching for user...');
     const user = await User.findOne({
       $or: [
         { username: usernameOrEmail },
@@ -41,8 +57,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check password
+    console.log('🔒 Validating password...');
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    console.log('🔒 Password validation:', isPasswordValid);
+    console.log('🔒 Password validation result:', isPasswordValid);
 
     if (!isPasswordValid) {
       console.log('❌ Invalid password');
@@ -52,29 +69,57 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update last seen
+    // Update last seen and add new session
+    console.log('🕒 Updating last seen and adding session...');
+    
+    // Generate unique session ID
+    const sessionId = crypto.randomBytes(32).toString('hex');
+    const deviceInfo = request.headers.get('user-agent') || 'Unknown Device';
+    
+    // Add new session to user's active sessions
+    if (!user.activeSessions) {
+      user.activeSessions = [];
+    }
+    
+    // Add new session
+    user.activeSessions.push({
+      sessionId: sessionId,
+      deviceInfo: deviceInfo,
+      lastActivity: new Date(),
+      createdAt: new Date()
+    });
+    
+    // Update last seen and online status
     user.lastSeen = new Date();
+    user.isOnline = true;
+    user.lastActivity = new Date();
+    
     await user.save();
+    console.log('✅ User session updated successfully');
 
-    // Generate JWT token
+    // Generate JWT token with session ID
+    console.log('🔑 Generating JWT token...');
     const token = jwt.sign(
       { 
         userId: user._id,
         username: user.username,
-        email: user.email
+        email: user.email,
+        sessionId: sessionId
       },
       process.env.JWT_SECRET!,
       { expiresIn: '7d' }
     );
 
-    console.log('✅ Login successful for user:', user.username);
+    console.log('✅ Login successful for user:', user.username, 'with session:', sessionId);
 
     // Remove password from response
     const userResponse = {
       id: user._id,
       username: user.username,
       email: user.email,
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
+      sessionId: sessionId,
+      deviceInfo: deviceInfo
     };
 
     return NextResponse.json({

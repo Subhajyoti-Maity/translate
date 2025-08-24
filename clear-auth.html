@@ -3,82 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clear Authentication Data</title>
+    <title>Clear Authentication - Chat App</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
+        
         .container {
-            background: rgba(255, 255, 255, 0.1);
-            padding: 30px;
+            background: white;
+            padding: 2rem;
             border-radius: 15px;
-            backdrop-filter: blur(10px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
         }
-        button {
-            background: #ff4757;
+        
+        .icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-size: 1.8rem;
+        }
+        
+        .description {
+            color: #666;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
             color: white;
             border: none;
-            padding: 15px 30px;
-            border-radius: 8px;
-            font-size: 16px;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 1rem;
             cursor: pointer;
-            margin: 10px;
-            transition: background 0.3s;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin: 0.5rem;
         }
-        button:hover {
-            background: #ff3742;
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
         }
-        .success {
-            background: #2ed573;
+        
+        .button.secondary {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
         }
-        .success:hover {
-            background: #26d0ce;
-        }
-        .info {
-            background: rgba(255, 255, 255, 0.2);
-            padding: 15px;
+        
+        .status {
+            margin-top: 1rem;
+            padding: 1rem;
             border-radius: 8px;
-            margin: 20px 0;
+            font-weight: 500;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔐 Clear Authentication Data</h1>
-        <p>This will clear all stored login information and refresh the chat application.</p>
+        <div class="icon">🔐</div>
+        <h1>Clear Authentication</h1>
+        <p class="description">
+            This tool will clear all authentication data including:
+            <br>• JWT tokens
+            <br>• User sessions
+            <br>• Browser cookies
+            <br>• Local storage data
+        </p>
         
-        <div class="info">
-            <h3>What will be cleared:</h3>
-            <ul style="text-align: left; display: inline-block;">
-                <li>Authentication tokens</li>
-                <li>User data</li>
-                <li>Session information</li>
-                <li>Cookies</li>
-            </ul>
+        <div class="warning">
+            ⚠️ <strong>Warning:</strong> This will log you out from all devices and you'll need to log in again.
         </div>
         
-        <button onclick="clearAuth()">🧹 Clear All Auth Data</button>
-        <button onclick="goToChat()" class="success">💬 Go to Chat App</button>
+        <button class="button" onclick="clearAuth()">🗑️ Clear All Auth Data</button>
+        <button class="button secondary" onclick="clearLocal()">🧹 Clear Local Data Only</button>
         
-        <div id="status" style="margin-top: 20px;"></div>
+        <div id="status"></div>
     </div>
 
     <script>
-        function clearAuth() {
-            const statusDiv = document.getElementById('status');
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
             
-            try {
-                // Clear localStorage
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
+            setTimeout(() => {
+                status.textContent = '';
+                status.className = '';
+            }, 5000);
+        }
+
+        function clearAuth() {
+            if (confirm('Are you sure you want to clear ALL authentication data? This will log you out completely.')) {
+                // Clear local storage
+                localStorage.clear();
                 
-                // Clear sessionStorage
+                // Clear session storage
                 sessionStorage.clear();
                 
                 // Clear cookies
@@ -86,36 +145,35 @@
                     document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
                 });
                 
-                statusDiv.innerHTML = '<div style="color: #2ed573; font-weight: bold;">✅ Authentication data cleared successfully!</div>';
+                // Clear auth tokens from memory
+                if (window.authToken) {
+                    delete window.authToken;
+                }
                 
-                // Show success message and redirect option
+                showStatus('✅ All authentication data cleared successfully!', 'success');
+                
+                // Redirect to login page after a short delay
                 setTimeout(() => {
-                    statusDiv.innerHTML += '<div style="margin-top: 10px;"><button onclick="goToChat()" class="success">🔄 Go to Chat App (Fresh Start)</button></div>';
-                }, 1000);
-                
-            } catch (error) {
-                statusDiv.innerHTML = '<div style="color: #ff4757; font-weight: bold;">❌ Error clearing data: ' + error.message + '</div>';
+                    window.location.href = '/login';
+                }, 2000);
             }
         }
-        
-        function goToChat() {
-            // Redirect to the chat app
-            window.location.href = 'http://localhost:3000';
-        }
-        
-        // Check current auth status
-        window.onload = function() {
-            const token = localStorage.getItem('token');
-            const user = localStorage.getItem('user');
+
+        function clearLocal() {
+            // Clear only local storage (less destructive)
+            localStorage.clear();
+            sessionStorage.clear();
             
-            if (token || user) {
-                document.getElementById('status').innerHTML = 
-                    '<div style="color: #ffa502; font-weight: bold;">⚠️ Authentication data found. Click "Clear All Auth Data" to remove it.</div>';
-            } else {
-                document.getElementById('status').innerHTML = 
-                    '<div style="color: #2ed573; font-weight: bold;">✅ No authentication data found. You can go to the chat app.</div>';
+            showStatus('✅ Local data cleared successfully!', 'success');
+        }
+
+        // Check if user is logged in
+        window.addEventListener('load', function() {
+            const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+            if (!token) {
+                showStatus('ℹ️ No authentication data found. You are already logged out.', 'success');
             }
-        };
+        });
     </script>
 </body>
 </html>

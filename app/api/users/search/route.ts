@@ -15,8 +15,18 @@ export async function GET(request: NextRequest) {
     console.log('🔍 Search query:', query, 'Current user ID:', currentUserId);
 
     if (!currentUserId) {
+      console.log('❌ No user ID provided');
       return NextResponse.json(
         { error: 'User ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Validate the user ID format
+    if (!currentUserId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.log('❌ Invalid user ID format:', currentUserId);
+      return NextResponse.json(
+        { error: 'Invalid user ID format' },
         { status: 400 }
       );
     }
@@ -32,7 +42,10 @@ export async function GET(request: NextRequest) {
       if (!currentUser) {
         console.log('❌ Current user not found in database:', currentUserId);
         return NextResponse.json(
-          { error: 'Current user not found. Please log in again.' },
+          { 
+            error: 'Current user not found. Please log in again.',
+            code: 'USER_NOT_FOUND'
+          },
           { status: 401 }
         );
       }
@@ -48,6 +61,20 @@ export async function GET(request: NextRequest) {
     } else {
       // Search users by username (excluding current user)
       console.log('🔍 Searching for users with query:', query);
+      
+      // First verify the current user exists
+      const currentUser = await User.findById(currentUserId);
+      if (!currentUser) {
+        console.log('❌ Current user not found in database:', currentUserId);
+        return NextResponse.json(
+          { 
+            error: 'Current user not found. Please log in again.',
+            code: 'USER_NOT_FOUND'
+          },
+          { status: 401 }
+        );
+      }
+      
       users = await User.find({
         _id: { $ne: currentUserId },
         username: { $regex: query, $options: 'i' }
@@ -65,21 +92,25 @@ export async function GET(request: NextRequest) {
     });
 
     // Transform the data to match the expected format
-    // Note: We'll set isOnline to false for all users initially
-    // The frontend will update this based on actual socket connections
     const transformedUsers = users.map(user => ({
       id: user._id.toString(),
       username: user.username,
       email: user.email,
       avatar: user.avatar,
-      // Remove hardcoded status and isOnline - let socket events handle this
       lastActivity: user.lastActivity || user.lastSeen,
-      // Don't set status or isOnline here - let real-time updates handle it
+      // Set default status as offline - will be updated by socket events
+      status: 'offline' as const,
+      isOnline: false
     }));
 
     console.log('🔍 Returning transformed users:', transformedUsers.length);
-    console.log('🔍 Users without hardcoded status:', transformedUsers.map(u => `${u.username}: no status set`));
-    return NextResponse.json({ users: transformedUsers });
+    console.log('🔍 Users with status:', transformedUsers.map(u => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
+    
+    return NextResponse.json({ 
+      users: transformedUsers,
+      total: transformedUsers.length,
+      currentUser: currentUserId
+    });
   } catch (error) {
     console.error('❌ User search error:', error);
     return NextResponse.json(

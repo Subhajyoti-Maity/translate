@@ -24,7 +24,20 @@ export default function UserSearch({ onUserSelect, currentUserId }: UserSearchPr
       try {
         const response = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}&userId=${currentUserId}`);
         const data = await response.json();
-        setUsers(data.users || []);
+        
+        if (response.ok && data.users) {
+          setUsers(data.users || []);
+        } else if (response.status === 401 && data.code === 'USER_NOT_FOUND') {
+          console.error('❌ User not found in database, redirecting to login');
+          // Clear invalid data and redirect to login
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+          return;
+        } else {
+          console.error('❌ Search failed:', data.error || 'Unknown error');
+          setUsers([]);
+        }
       } catch (error) {
         console.error('Failed to search users:', error);
         setUsers([]);

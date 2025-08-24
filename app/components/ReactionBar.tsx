@@ -116,7 +116,7 @@ const ReactionBar: React.FC<ReactionBarProps> = ({
   return (
     <div className="relative">
       {/* Quick reaction buttons */}
-      <div className="flex items-center space-x-1 mb-2">
+      <div className="flex items-center space-x-2 mb-3">
         {reactions.slice(0, 4).map(({ emoji, label }) => {
           // Safety check: ensure emoji is valid
           if (!emoji || typeof emoji !== 'string' || emoji.length === 0) {
@@ -143,16 +143,16 @@ const ReactionBar: React.FC<ReactionBarProps> = ({
             e.stopPropagation();
             setIsExpanded(!isExpanded);
           }}
-          className="px-2 py-1 rounded-full bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100 transition-colors"
+          className="px-3 py-2 rounded-xl bg-gradient-to-r from-gray-50 to-gray-100 text-gray-600 border border-gray-200 hover:from-gray-100 hover:to-gray-200 transition-all duration-200 transform hover:scale-105 shadow-sm hover:shadow-md group"
         >
-          <span className="text-sm">+</span>
+          <span className="text-sm font-medium group-hover:text-purple-600 transition-colors duration-200">+</span>
         </button>
       </div>
 
       {/* Expanded reactions */}
       {isExpanded && (
-        <div className="absolute bottom-full left-0 mb-2 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
-          <div className="grid grid-cols-4 gap-2">
+        <div className="absolute bottom-full left-0 mb-3 p-4 bg-white/95 backdrop-blur-sm border border-gray-200/50 rounded-2xl shadow-2xl z-10 animate-in slide-in-from-bottom-2 duration-200">
+          <div className="grid grid-cols-4 gap-3">
             {reactions.map(({ emoji, label }) => (
               <button
                 key={emoji}
@@ -162,25 +162,35 @@ const ReactionBar: React.FC<ReactionBarProps> = ({
                   setIsExpanded(false);
                 }}
                 className={`
-                  p-2 rounded-lg text-center transition-all duration-200 hover:scale-110
+                  p-3 rounded-xl text-center transition-all duration-200 hover:scale-110 transform group
                   ${isUserReaction(emoji) 
-                    ? 'bg-blue-100 text-blue-600' 
-                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                    ? 'bg-gradient-to-r from-blue-100 to-purple-100 text-blue-600 border border-blue-200 shadow-md' 
+                    : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-600 hover:from-gray-100 hover:to-gray-200 border border-gray-200 hover:border-gray-300 hover:shadow-md'
                   }
                 `}
                 title={label}
               >
-                <div className="text-xl">{emoji}</div>
-                <div className="text-xs mt-1">{label}</div>
+                <div className="text-2xl group-hover:scale-110 transition-transform duration-200">{emoji}</div>
+                <div className="text-xs mt-2 font-medium opacity-80">{label}</div>
               </button>
             ))}
+          </div>
+          
+          {/* Close button */}
+          <div className="mt-3 pt-3 border-t border-gray-200/50">
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="w-full px-3 py-2 bg-gradient-to-r from-gray-100 to-gray-200 text-gray-600 rounded-xl hover:from-gray-200 hover:to-gray-300 transition-all duration-200 text-sm font-medium"
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
 
       {/* Current reactions display */}
       {Object.keys(localReactions).length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-1">
+        <div className="flex flex-wrap gap-2 mt-2">
           {/* Group reactions by emoji and show count */}
           {Object.entries(
             Object.values(localReactions).reduce((acc, reaction) => {
@@ -190,11 +200,11 @@ const ReactionBar: React.FC<ReactionBarProps> = ({
           ).map(([reaction, count]) => (
             <span
               key={reaction}
-              className="inline-flex items-center px-2 py-1 bg-blue-50 text-blue-600 rounded-full text-xs"
+              className="inline-flex items-center px-3 py-1.5 bg-gradient-to-r from-blue-50 to-purple-50 text-blue-600 rounded-full text-xs font-medium border border-blue-200/50 shadow-sm hover:shadow-md transition-all duration-200 transform hover:scale-105"
               title={`${reaction} (${count} reaction${count > 1 ? 's' : ''})`}
             >
-              <span className="mr-1">{reaction}</span>
-              <span className="text-blue-500 font-medium">{count}</span>
+              <span className="mr-1.5 text-sm">{reaction}</span>
+              <span className="text-blue-500 font-semibold bg-white/60 px-1.5 py-0.5 rounded-full text-xs">{count}</span>
             </span>
           ))}
         </div>

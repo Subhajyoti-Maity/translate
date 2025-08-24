@@ -9,6 +9,15 @@ export interface User {
   status?: 'online' | 'offline' | 'away';
   isOnline?: boolean;
   lastActivity?: string;
+  sessionId?: string;
+  deviceInfo?: string;
+}
+
+export interface Session {
+  sessionId: string;
+  deviceInfo: string;
+  lastActivity: string;
+  createdAt: string;
 }
 
 export interface Message {
@@ -28,6 +37,8 @@ export interface AuthResponse {
   message: string;
   user: User;
   token: string;
+  sessionId?: string;
+  deviceInfo?: string;
 }
 
 // Global window interface extension for delete timeout

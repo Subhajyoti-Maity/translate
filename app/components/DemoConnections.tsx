@@ -64,7 +64,7 @@ export default function DemoConnections({ onUserSelect, selectedUserId, currentU
   }, [searchQuery, currentUserId]);
 
   // Demo favorites (you can later implement real favorites from database)
-  const favoriteUsers: User[] = allUsers.slice(0, 2); // First 2 users as favorites for demo
+  const favoriteUsers: User[] = allUsers?.slice(0, 2) || []; // First 2 users as favorites for demo
 
   const getLastMessagePreview = (user: User) => {
     // This would typically come from the last message in the conversation
@@ -89,7 +89,7 @@ export default function DemoConnections({ onUserSelect, selectedUserId, currentU
   };
 
   // Display users based on search or show all users
-  const displayUsers = searchQuery.trim() ? users : allUsers;
+  const displayUsers = searchQuery.trim() ? users : allUsers || [];
 
   return (
     <div className="w-80 bg-white border-r border-gray-200 flex flex-col">

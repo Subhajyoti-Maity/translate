@@ -56,11 +56,11 @@ export default function Profile({ user, onProfileUpdate, onRefresh }: ProfilePro
       }
     };
 
-    if (user?.id) {
-      fetchSessions();
-      const interval = setInterval(fetchSessions, 30000); // Poll every 30 seconds
-      return () => clearInterval(interval);
-    }
+          if (user?.id) {
+        fetchSessions();
+        const interval = setInterval(fetchSessions, 30000); // Poll every 30 seconds (reduced frequency)
+        return () => clearInterval(interval);
+      }
   }, [user?.id]);
 
   const handleSave = async () => {

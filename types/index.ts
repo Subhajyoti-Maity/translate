@@ -23,14 +23,16 @@ export interface Session {
 export interface Message {
   id: string;
   tempId?: string; // For temporary messages before server confirmation
-  sender: string;
-  receiver: string;
+  senderId: string;
+  receiverId: string;
   text: string;
   timestamp: Date;
   isRead: boolean;
+  // WhatsApp-style deletion fields
   deletedFor?: string[]; // Array of user IDs for whom this message is deleted
   deletedForEveryone?: boolean; // Flag to indicate if message is deleted for everyone
-  reactions?: Record<string, string>; // Add reactions field
+  reactions?: Record<string, string>; // User reactions to messages
+  isReaction?: boolean; // Flag to indicate if this is a reaction message
 }
 
 export interface AuthResponse {

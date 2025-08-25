@@ -5,41 +5,40 @@ import { useState } from 'react';
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
-  userCount?: number;
   isOnline?: boolean;
   onLogout?: () => void;
   onDeleteConnections?: () => void;
 }
 
-export default function Sidebar({ activeTab, onTabChange, userCount = 0, isOnline, onLogout, onDeleteConnections }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange, isOnline, onLogout, onDeleteConnections }: SidebarProps) {
   const tabs = [
-    { id: 'chat', icon: '💬', label: 'Chat', color: 'from-blue-500 to-blue-600' },
-    { id: 'connections', icon: '🔗', label: 'Connections', color: 'from-purple-500 to-purple-600' },
-    { id: 'favorites', icon: '❤️', label: 'Favorites', color: 'from-pink-500 to-pink-600' },
-    { id: 'profile', icon: '👤', label: 'Profile', color: 'from-indigo-500 to-indigo-600' },
+    { id: 'chat', icon: '💬', label: 'Chat', color: 'from-indigo-500 via-purple-500 to-pink-500' },
+    { id: 'connections', icon: '🔗', label: 'Connections', color: 'from-pink-500 via-orange-500 to-yellow-500' },
+    { id: 'favorites', icon: '❤️', label: 'Favorites', color: 'from-yellow-500 via-green-500 to-emerald-500' },
+    { id: 'profile', icon: '👤', label: 'Profile', color: 'from-emerald-500 via-teal-500 to-cyan-500' },
   ];
 
   return (
-    <div className="w-20 bg-gradient-to-b from-white to-gray-50 border-r border-gray-200/50 flex flex-col items-center py-8 shadow-2xl backdrop-blur-sm">
+    <div className="w-20 bg-gradient-to-b from-white via-cyan-50/30 to-indigo-50/30 border-r border-cyan-200/50 flex flex-col items-center py-8 shadow-2xl backdrop-blur-sm">
       {/* Logo */}
       <div className="mb-10 relative group">
-        <div className="w-14 h-14 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-110 group-hover:rotate-3">
-          <span className="bg-gradient-to-r from-white to-gray-100 bg-clip-text text-transparent font-black">
+        <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 via-purple-500 via-pink-500 to-orange-500 rounded-2xl flex items-center justify-center text-white font-bold text-xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-110 group-hover:rotate-3">
+          <span className="bg-gradient-to-r from-white to-gray-100 bg-clip-text text-transparent font-black filter drop-shadow-lg">
             C
           </span>
         </div>
         
-        {/* Animated Ring */}
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-400 via-purple-400 to-pink-400 opacity-0 group-hover:opacity-20 transition-opacity duration-300 animate-pulse"></div>
+        {/* Enhanced Animated Ring */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-indigo-400 via-purple-400 to-pink-400 opacity-0 group-hover:opacity-25 transition-opacity duration-300 animate-pulse"></div>
         
-        {/* Online Status Indicator */}
+        {/* Enhanced Online Status Indicator */}
         <div className={`absolute -bottom-2 -right-2 w-4 h-4 rounded-full border-3 border-white shadow-lg transition-all duration-300 ${
           isOnline 
-            ? 'bg-gradient-to-r from-green-400 to-emerald-500 animate-pulse' 
-            : 'bg-gradient-to-r from-gray-400 to-gray-500'
+            ? 'bg-gradient-to-r from-emerald-400 via-green-400 to-teal-400 animate-pulse' 
+            : 'bg-gradient-to-r from-gray-400 via-slate-400 to-gray-500'
         }`} title={isOnline ? 'Online' : 'Offline'}>
           {isOnline && (
-            <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75"></div>
+            <div className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75"></div>
           )}
         </div>
       </div>
@@ -61,13 +60,6 @@ export default function Sidebar({ activeTab, onTabChange, userCount = 0, isOnlin
               {tab.icon}
             </span>
             
-            {/* User count badge for connections tab */}
-            {tab.id === 'connections' && userCount > 0 && (
-              <div className="absolute -top-3 -right-3 w-6 h-6 bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs rounded-full flex items-center justify-center font-bold shadow-lg animate-bounce">
-                {userCount}
-              </div>
-            )}
-            
             {/* Hover Effect */}
             {activeTab !== tab.id && (
               <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -82,28 +74,28 @@ export default function Sidebar({ activeTab, onTabChange, userCount = 0, isOnlin
       {/* Action Buttons - Positioned in middle */}
       {onLogout && onDeleteConnections && (
         <div className="mb-6 space-y-3">
-          {/* Logout Button */}
+          {/* Enhanced Logout Button */}
           <button
             onClick={onLogout}
-            className="w-14 h-12 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-2xl hover:from-red-600 hover:to-pink-600 transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-xl font-medium text-sm flex items-center justify-center group relative"
+            className="w-14 h-12 bg-gradient-to-r from-red-500 via-pink-500 to-rose-500 text-white rounded-2xl hover:from-red-600 hover:via-pink-600 hover:to-rose-600 transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-xl font-medium text-sm flex items-center justify-center group relative border border-white/20 hover:border-white/40"
             title="Logout"
           >
             <span className="transition-transform duration-300 group-hover:scale-110">🚪</span>
             
-            {/* Hover Effect Ring */}
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-red-400 to-pink-400 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+            {/* Enhanced Hover Effect Ring */}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-red-400 via-pink-400 to-rose-400 opacity-0 group-hover:opacity-25 transition-opacity duration-300"></div>
           </button>
           
-          {/* Delete Connections Button */}
+          {/* Enhanced Delete Connections Button */}
           <button
             onClick={onDeleteConnections}
-            className="w-14 h-12 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-2xl hover:from-red-600 hover:to-pink-600 transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-xl font-medium text-sm flex items-center justify-center group relative"
+            className="w-14 h-12 bg-gradient-to-r from-orange-500 via-red-500 to-pink-500 text-white rounded-2xl hover:from-orange-600 hover:via-red-600 hover:to-pink-600 transition-all duration-300 transform hover:scale-110 shadow-lg hover:shadow-xl font-medium text-sm flex items-center justify-center group relative border border-white/20 hover:border-white/40"
             title="Delete Connections"
           >
             <span className="transition-transform duration-300 group-hover:scale-110">🗑️</span>
             
-            {/* Hover Effect Ring */}
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-red-400 to-pink-400 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+            {/* Enhanced Hover Effect Ring */}
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-orange-400 via-red-400 to-pink-400 opacity-0 group-hover:opacity-25 transition-opacity duration-300"></div>
           </button>
         </div>
       )}

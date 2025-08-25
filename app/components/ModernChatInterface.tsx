@@ -23,7 +23,7 @@ export default function ModernChatInterface({
   onDeleteMessage,
   onReactionToggle,
   onForwardMessage,
-  availableUsers = []
+  availableUsers = [],
 }: ModernChatInterfaceProps) {
   const [newMessage, setNewMessage] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -33,6 +33,7 @@ export default function ModernChatInterface({
   const [showNotification, setShowNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [showForwardModal, setShowForwardModal] = useState<string | null>(null);
   const [selectedRecipient, setSelectedRecipient] = useState<string>('');
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   
   // Debug logging removed for cleaner console
   const [isTyping, setIsTyping] = useState(false);
@@ -44,7 +45,9 @@ export default function ModernChatInterface({
     setTimeout(() => setShowNotification(null), 5000); // Auto-hide after 5 seconds
   };
 
-  // Function to handle delete for everyone
+
+
+  // Function to handle delete for everyone (WhatsApp-style)
   const handleDeleteForEveryone = (messageId: string) => {
     console.log('🌍 Delete for everyone button clicked for message:', messageId);
     
@@ -56,15 +59,21 @@ export default function ModernChatInterface({
       return;
     }
     
+    // Check if this is a temporary message using the tempId property
+    if (message.tempId) {
+      console.log('⚠️ Cannot delete temporary message for everyone:', messageId);
+      showNotificationMessage('error', 'Cannot delete a message that is still being sent!');
+      return;
+    }
+    
     // Validate that the current user is the sender of the message
-    if (message.sender !== user?.id) {
+    if (message.senderId !== user?.id) {
       console.warn('⚠️ Unauthorized delete for everyone attempt:', {
-        messageSender: message.sender,
+        messageSender: message.senderId,
         currentUser: user?.id,
         messageId
       });
       showNotificationMessage('error', 'Only the message sender can delete for everyone!');
-      setShowDeleteConfirm(null);
       return;
     }
     
@@ -82,25 +91,25 @@ export default function ModernChatInterface({
     }
     
     setDeletingMessage(messageId);
-    showNotificationMessage('success', 'Deleting message for everyone...');
+    
+    // Show WhatsApp-style success message
+    showNotificationMessage('success', '🗑️ Deleting message for everyone...');
     
     console.log('📞 Calling onDeleteMessage with:', messageId, 'for-everyone');
     onDeleteMessage(messageId, 'for-everyone');
     
-    setShowDeleteConfirm(null);
-    setDeletingMessage(null);
-    
-    // Show success message after a delay
+    // Keep the deleting state for a moment to show loading
     setTimeout(() => {
-      showNotificationMessage('success', 'Message deleted for everyone successfully!');
-    }, 1000);
+      setDeletingMessage(null);
+      showNotificationMessage('success', '✅ Message deleted for everyone successfully!');
+    }, 2000);
   };
 
   // Function to handle delete for me
   const handleDeleteForMe = (messageId: string) => {
     console.log('👁️ Delete for me button clicked for message:', messageId);
     
-    // Find the message to check if user is involved
+    // Find the message to check if user is the sender
     const message = messages.find(m => m.id === messageId);
     if (!message) {
       console.error('❌ Message not found for deletion:', messageId);
@@ -108,31 +117,36 @@ export default function ModernChatInterface({
       return;
     }
     
+    // Check if this is a temporary message using the tempId property
+    if (message.tempId) {
+      console.log('⚠️ Cannot delete temporary message for me:', messageId);
+      showNotificationMessage('error', 'Cannot delete a message that is still being sent!');
+      return;
+    }
+    
     // Validate that the current user is either sender or receiver
-    if (message.sender !== user?.id && message.receiver !== user?.id) {
+    if (message.senderId !== user?.id && message.receiverId !== user?.id) {
       console.warn('⚠️ Unauthorized delete for me attempt:', {
-        messageSender: message.sender,
-        messageReceiver: message.receiver,
+        messageSender: message.senderId,
+        messageReceiver: message.receiverId,
         currentUser: user?.id,
         messageId
       });
       showNotificationMessage('error', 'You can only delete messages you sent or received!');
-      setShowDeleteConfirm(null);
       return;
     }
     
     setDeletingMessage(messageId);
     
-    // Show loading state
-    showNotificationMessage('success', 'Deleting message for you...');
+    // Show WhatsApp-style loading state
+    showNotificationMessage('success', '👁️ Deleting message for you...');
     
     // Call the delete function
     onDeleteMessage?.(messageId, 'for-me');
-    setShowDeleteConfirm(null);
     
     // Show success message after a short delay
     setTimeout(() => {
-      showNotificationMessage('success', 'Message deleted for you successfully!');
+      showNotificationMessage('success', '✅ Message deleted for you successfully!');
     }, 1000);
   };
 
@@ -186,16 +200,24 @@ export default function ModernChatInterface({
           setNewMessage('');
         }
       }
-      
-      // Escape to close delete confirmation
-      if (e.key === 'Escape' && showDeleteConfirm) {
-        setShowDeleteConfirm(null);
-      }
     };
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, [newMessage, showDeleteConfirm, onSendMessage]);
+  }, [newMessage, onSendMessage]);
+
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (showEmojiPicker && !target.closest('.emoji-picker')) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showEmojiPicker]);
 
   const formatTime = (timestamp: Date | string) => {
     const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
@@ -238,18 +260,35 @@ export default function ModernChatInterface({
     return groups;
   };
 
-  const messageGroups = groupMessagesByDate(messages);
+  // Filter messages to hide deleted ones
+  const filteredMessages = messages.filter(message => {
+    const isDeletedForMe = message.deletedFor?.includes(user.id);
+    const isDeletedForEveryone = message.deletedForEveryone;
+    
+    // Debug logging for deletion flags
+    if (isDeletedForMe || isDeletedForEveryone) {
+      console.log(`🚫 Message ${message.id} filtered out:`, {
+        messageId: message.id,
+        text: message.text.substring(0, 50) + '...',
+        deletedFor: message.deletedFor,
+        deletedForEveryone: message.deletedForEveryone,
+        currentUserId: user.id,
+        isDeletedForMe,
+        isDeletedForEveryone
+      });
+    }
+    
+    return !isDeletedForMe && !isDeletedForEveryone;
+  });
 
   // Filter messages based on search query
-  const filteredMessages = searchQuery.trim() 
-    ? messages.filter(message => 
-        message.text.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !message.deletedFor?.includes(user.id) &&
-        !message.deletedForEveryone
+  const searchFilteredMessages = searchQuery.trim() 
+    ? filteredMessages.filter(message => 
+        message.text.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : messages;
+    : filteredMessages;
 
-  const filteredMessageGroups = groupMessagesByDate(filteredMessages);
+  const messageGroups = groupMessagesByDate(searchFilteredMessages);
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -286,15 +325,15 @@ export default function ModernChatInterface({
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span className="text-sm text-gray-600">Online</span>
                 <span className="text-xs text-gray-400">•</span>
-                <span className="text-xs text-gray-400">{messages.length} messages</span>
+                <span className="text-xs text-gray-400">{filteredMessages.length} messages</span>
                 <span className="text-xs text-gray-400">•</span>
                 <span className="text-xs text-gray-400">User: {user.id}</span>
                 <span className="text-xs text-gray-400">•</span>
                 <span className="text-xs text-gray-400">Selected: {selectedUser.id}</span>
                 <span className="text-xs text-gray-400">•</span>
-                <span className="text-xs text-gray-400">Own messages: {messages.filter(m => m.sender === user.id).length}</span>
+                <span className="text-xs text-gray-400">Own messages: {filteredMessages.filter(m => m.senderId === user.id).length}</span>
                 <span className="text-xs text-gray-400">•</span>
-                <span className="text-xs text-gray-400">Received: {messages.filter(m => m.sender !== user.id).length}</span>
+                <span className="text-xs text-gray-400">Received: {filteredMessages.filter(m => m.senderId !== user.id).length}</span>
               </div>
             </div>
           </div>
@@ -359,7 +398,7 @@ export default function ModernChatInterface({
           )}
         </div>
         
-        {Object.entries(filteredMessageGroups).map(([date, dateMessages]) => (
+        {Object.entries(messageGroups).map(([date, dateMessages]) => (
           <div key={date}>
             {/* Date Separator */}
             <div className="flex items-center justify-center mb-6">
@@ -373,12 +412,23 @@ export default function ModernChatInterface({
             
             {/* Messages for this date */}
             <div className="space-y-4">
-              {dateMessages.map((message, index) => {
-                const isOwnMessage = message.sender === user.id;
+                          {dateMessages
+              .map((message, index) => {
+                const isOwnMessage = message.senderId === user.id;
+                
+                // Ensure message has valid ID
+                if (!message.id || message.id === 'undefined' || message.id === 'null') {
+                  console.warn('⚠️ Message without valid ID found, skipping:', {
+                    messageId: message.id,
+                    messageIdType: typeof message.id
+                  });
+                  return null; // Skip rendering this message
+                }
+                
                 // Ensure timestamp is a Date object and handle it safely
                 const timestamp = message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp);
                 // Use a combination of id, timestamp, and index for unique keys
-                const uniqueKey = `${message.id}-${timestamp.getTime()}-${index}`;
+                const uniqueKey = `${message.id || 'no-id'}-${timestamp.getTime()}-${index}`;
                 
                 return (
                   <div
@@ -395,85 +445,86 @@ export default function ModernChatInterface({
                         </div>
                       )}
                       
-                      <div
-                        className={`rounded-2xl px-4 py-3 shadow-sm transition-all duration-200 hover:shadow-md ${
-                          message.deletedFor?.includes(user.id) || message.deletedForEveryone
-                            ? 'bg-gray-100 text-gray-400 border border-gray-200'
-                            : isOwnMessage
-                            ? message.tempId 
-                              ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white opacity-80'
-                              : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md'
-                            : 'bg-white text-gray-900 border border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        {/* Message Text */}
-                        <div className="text-sm leading-relaxed font-sans">
-                          {message.deletedFor && message.deletedFor.includes(user.id) ? (
-                            <span className="italic text-gray-400 flex items-center space-x-2">
-                              <span>🗑️</span>
-                              <span>{isOwnMessage ? 'You deleted this message' : 'This message was deleted'}</span>
-                            </span>
-                          ) : message.deletedForEveryone ? (
-                            <span className="italic text-gray-400 flex items-center space-x-2">
-                              <span>🌍</span>
-                              <span>This message was deleted</span>
-                            </span>
-                          ) : (
-                            <>
-                              {message.text}
-                              {message.tempId && (
-                                <span className="ml-2 text-xs opacity-70 flex items-center space-x-1">
-                                  <span className="animate-pulse">⏳</span>
-                                  <span>sending...</span>
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Timestamp, Status, and Actions */}
-                      <div className={`flex items-center space-x-2 mt-2 ${
-                        isOwnMessage ? 'justify-end' : 'justify-start'
-                      }`}>
-                        <span className={`text-xs font-sans ${
-                          message.deletedFor?.includes(user.id) || message.deletedForEveryone
-                            ? 'text-gray-300'
-                            : 'text-gray-400'
-                        }`}>
-                          <span title={`${formatDate(message.timestamp)} at ${formatTime(message.timestamp)}`}>
-                            {formatTime(message.timestamp)}
-                          </span>
-                        </span>
-                        
-                        {/* Enhanced Status Indicators */}
-                        {isOwnMessage && !message.deletedFor?.includes(user.id) && !message.deletedForEveryone && (
-                          <div className="flex items-center space-x-2">
-                            {/* Message Status */}
-                            <div className="flex items-center space-x-1">
-                              {message.tempId ? (
-                                <div className="flex items-center space-x-1 text-blue-400">
-                                  <svg className="w-3 h-3 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                  </svg>
-                                  <span className="text-xs">Sending</span>
-                                </div>
-                              ) : (
-                                <div className="flex items-center space-x-1 text-green-500">
-                                  <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                  </svg>
-                                  <span className="text-xs">Delivered</span>
-                                </div>
-                              )}
+                      {/* Message Content */}
+                      <div className="flex flex-col">
+                        {/* User Avatar for other user's messages */}
+                        {!isOwnMessage && (
+                          <div className="flex items-end space-x-2 mb-2">
+                            <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-xs font-semibold shadow-md">
+                              {selectedUser.username.charAt(0).toUpperCase()}
                             </div>
-                            
-                            {/* Quick Reactions - Removed duplicate */}
+                            <span className="text-xs text-gray-500 font-medium">{selectedUser.username}</span>
                           </div>
                         )}
                         
-                        {/* Delete Button - Enhanced styling */}
-                        {!message.deletedFor?.includes(user.id) && !message.deletedForEveryone && (
+                        <div
+                          className={`rounded-2xl px-4 py-3 shadow-sm transition-all duration-300 hover:shadow-md ${
+                            deletingMessage === message.id
+                              ? 'bg-yellow-100 border border-yellow-300 opacity-75 animate-pulse'
+                              : isOwnMessage
+                              ? message.tempId 
+                                ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white opacity-80'
+                                : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-md'
+                              : 'bg-white text-gray-900 border border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {/* Message Text */}
+                          <div className="text-sm leading-relaxed font-sans">
+                            {deletingMessage === message.id ? (
+                              // Show deleting state
+                              <span className="italic text-yellow-600 flex items-center space-x-2">
+                                <span className="animate-spin">⏳</span>
+                                <span>Deleting message...</span>
+                              </span>
+                            ) : (
+                              <>
+                                {message.text}
+                                {message.tempId && (
+                                  <span className="ml-2 text-xs opacity-70 flex items-center space-x-1">
+                                    <span className="animate-pulse">⏳</span>
+                                    <span>sending...</span>
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Timestamp, Status, and Actions */}
+                        <div className={`flex items-center space-x-2 mt-2 ${
+                          isOwnMessage ? 'justify-end' : 'justify-start'
+                        }`}>
+                          <span className="text-xs font-sans text-gray-400">
+                            <span title={`${formatDate(message.timestamp)} at ${formatTime(message.timestamp)}`}>
+                              {formatTime(message.timestamp)}
+                            </span>
+                          </span>
+                          
+                          {/* Enhanced Status Indicators */}
+                          {isOwnMessage && (
+                            <div className="flex items-center space-x-2">
+                              {/* Message Status */}
+                              <div className="flex items-center space-x-1">
+                                {message.tempId ? (
+                                  <div className="flex items-center space-x-1 text-blue-400">
+                                    <svg className="w-3 h-3 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="text-xs">Sending</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center space-x-1 text-green-500">
+                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                    <span className="text-xs">Delivered</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Message Actions - Only show for non-deleted messages */}
                           <div className="flex items-center space-x-2">
                             {/* Reply Button */}
                             <button
@@ -485,18 +536,6 @@ export default function ModernChatInterface({
                               title="Reply to this message"
                             >
                               💬
-                            </button>
-                            
-                            {/* Context Menu Button */}
-                            <button
-                              onClick={() => {
-                                // Toggle context menu for this message
-                                console.log('📋 Context menu for message:', message.id);
-                              }}
-                              className="text-xs text-gray-400 hover:text-gray-600 transition-all duration-200 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 hover:shadow-sm"
-                              title="More options"
-                            >
-                              ⋯
                             </button>
                             
                             {/* Forward Button */}
@@ -540,140 +579,78 @@ export default function ModernChatInterface({
                             </button>
                             
                             {/* Reactions Button */}
-                            <div className="inline-block">
-                              <ReactionBar
-                                messageId={message.id}
-                                userId={user.id}
-                                currentReactions={message.reactions || {}}
-                                onReactionToggle={handleReactionToggle}
-                              />
-                            </div>
-                            
-                            {/* Delete Button - Only show for messages user can delete */}
-                            {(message.sender === user.id || message.receiver === user.id) && (
+                            {message.id && message.id !== 'undefined' && message.id !== 'null' && (
+                              <div className="inline-block">
+                                <ReactionBar
+                                  messageId={message.id}
+                                  userId={user.id}
+                                  currentReactions={message.reactions || {}}
+                                  onReactionToggle={handleReactionToggle}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Delete Button - Always show for non-temporary messages */}
+                        {(message.senderId === user.id || message.receiverId === user.id) && !message.tempId && (
+                          <div className="flex space-x-2">
+                            {/* Delete for Everyone - Only for sender */}
+                            {isOwnMessage && (
                               <button
                                 onClick={() => {
-                                  console.log('🗑️ DELETE BUTTON CLICKED!');
-                                  console.log('🗑️ Delete button clicked for message:', {
-                                    messageId: message.id,
-                                    isOwnMessage,
-                                    sender: message.sender,
-                                    receiver: message.receiver,
-                                    currentUser: user?.id,
-                                    onDeleteMessage: !!onDeleteMessage,
-                                    messageText: message.text
-                                  });
-                                  setShowDeleteConfirm(message.id);
+                                  if (onDeleteMessage) {
+                                    onDeleteMessage(message.id, 'for-everyone');
+                                  }
                                 }}
-                                className={`text-xs text-red-500 hover:text-red-700 transition-all duration-200 p-2 rounded-lg border font-medium hover:scale-105 ${
-                                  isOwnMessage 
-                                    ? 'bg-red-50 hover:bg-red-100 border-red-200 hover:border-red-300 hover:shadow-sm' 
-                                    : 'bg-orange-50 hover:bg-orange-100 border-orange-200 hover:border-orange-300 hover:shadow-sm'
-                                }`}
-                                title={isOwnMessage ? "Delete message (3 options)" : "Hide message (2 options)"}
+                                className="text-xs text-red-500 hover:text-red-700 transition-all duration-200 p-2 rounded-lg border border-red-200 hover:bg-red-50 hover:shadow-sm font-medium"
+                                title="Delete for everyone"
                               >
-                                {isOwnMessage ? '🗑️' : '👁️'}
+                                🌍 Delete for everyone
                               </button>
                             )}
+                            
+                            {/* Delete for Me - Always available */}
+                            <button
+                              onClick={() => {
+                                if (onDeleteMessage) {
+                                  onDeleteMessage(message.id, 'for-me');
+                                }
+                              }}
+                              className="text-xs text-blue-500 hover:text-blue-700 transition-all duration-200 p-2 rounded-lg border border-blue-200 hover:bg-blue-50 hover:shadow-sm font-medium"
+                              title="Delete for me"
+                            >
+                              👁️ Delete for me
+                            </button>
+
+                            {/* Cancel - Always available for both sender and receiver */}
+                            <button
+                              onClick={() => {
+                                // Cancel action - do nothing, just close any open modals or reset state
+                                console.log('Cancel clicked - no action taken');
+                              }}
+                              className="text-xs text-gray-500 hover:text-gray-700 transition-all duration-200 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 hover:shadow-sm font-medium"
+                              title="Cancel - don't delete message"
+                            >
+                              ✕ Cancel
+                            </button>
+                          </div>
+                        )}
+                        
+                        {/* Temporary Message Indicator */}
+                        {message.tempId && (
+                          <div className="text-xs text-gray-400 px-2 py-1 rounded-lg bg-gray-100 border border-gray-200" title="This message is still being sent and cannot be deleted">
+                            ⏳ Sending...
                           </div>
                         )}
                       </div>
-                      
-                      {/* Delete Confirmation */}
-                      {showDeleteConfirm === message.id && (
-                        <div className={`mt-2 ${isOwnMessage ? 'text-right' : 'text-left'}`}>
-                          <div className="inline-flex flex-col space-y-2 bg-white border border-gray-200 rounded-lg px-4 py-3 min-w-[280px] shadow-lg">
-                            <div className="text-center">
-                              <span className="text-sm text-gray-800 font-medium">
-                                {isOwnMessage && message.sender === user.id ? 'Delete this message?' : 'Hide this message?'}
-                              </span>
-                            </div>
-                            
-                            <div className="space-y-2">
-                              {isOwnMessage && message.sender === user.id ? (
-                                // SENDER OPTIONS: Only show "Delete for everyone" to the actual sender
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      console.log('🌍 CONFIRMATION: Delete for everyone clicked for message:', showDeleteConfirm);
-                                      handleDeleteForEveryone(showDeleteConfirm!);
-                                    }}
-                                    disabled={deletingMessage === message.id}
-                                    className="w-full text-sm bg-red-500 text-white px-4 py-2.5 rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-                                    title="Delete from everyone's view (like WhatsApp)"
-                                  >
-                                    {deletingMessage === message.id ? (
-                                      <span className="animate-spin">⏳</span>
-                                    ) : (
-                                      <>
-                                        <span>🌍</span>
-                                        <span>Delete for everyone</span>
-                                      </>
-                                    )}
-                                  </button>
-                                  
-                                  <button
-                                    onClick={() => handleDeleteForMe(message.id)}
-                                    disabled={deletingMessage === message.id}
-                                    className="w-full text-sm bg-blue-500 text-white px-4 py-2.5 rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-                                    title="Delete only from your view"
-                                  >
-                                    {deletingMessage === message.id ? (
-                                      <span className="animate-spin">⏳</span>
-                                    ) : (
-                                      <>
-                                        <span>👁️</span>
-                                        <span>Delete for me</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </>
-                              ) : (
-                                // RECEIVER OPTIONS: Only show "Delete for me" to receivers
-                                <button
-                                  onClick={() => handleDeleteForMe(message.id)}
-                                  disabled={deletingMessage === message.id}
-                                  className="w-full text-sm bg-orange-500 text-white px-4 py-2.5 rounded-lg hover:bg-orange-600 transition-colors flex items-center justify-center space-x-2 font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-                                  title="Hide this message from your view"
-                                >
-                                  {deletingMessage === message.id ? (
-                                    <span className="animate-spin">⏳</span>
-                                  ) : (
-                                    <>
-                                      <span>👁️</span>
-                                      <span>Delete for me</span>
-                                    </>
-                                  )}
-                                </button>
-                              )}
-                              
-                              <button
-                                onClick={() => setShowDeleteConfirm(null)}
-                                disabled={deletingMessage === message.id}
-                                className="w-full text-sm bg-gray-500 text-white px-4 py-2.5 rounded-lg hover:bg-gray-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                            
-                            {/* Enhanced Help text */}
-                            <div className="text-xs text-gray-500 text-center px-2 pt-2 border-t border-gray-100">
-                              {isOwnMessage && message.sender === user.id ? (
-                                <>
-                                  <p className="mb-1"><strong className="text-red-600">🌍 Delete for everyone:</strong> Removes message completely for all users (like WhatsApp)</p>
-                                  <p><strong className="text-blue-600">👁️ Delete for me:</strong> Only you won't see it (receiver still can)</p>
-                                </>
-                              ) : (
-                                <p><strong className="text-orange-600">👁️ Delete for me:</strong> Only you won't see this message (sender can still see it)</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
+
+
                     </div>
                   </div>
                 );
-              })}
+              })
+              .filter(Boolean)}
             </div>
           </div>
         ))}
@@ -729,93 +706,70 @@ export default function ModernChatInterface({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input */}
-      <div className="bg-white border-t border-gray-200 px-4 py-4 shadow-sm">
-        {/* Reply Preview */}
-        {replyToMessage && (
-          <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-blue-600 font-medium">Replying to:</span>
-                <span className="text-sm text-gray-700 truncate max-w-xs">
-                  {replyToMessage.text.length > 50 
-                    ? replyToMessage.text.substring(0, 50) + '...' 
-                    : replyToMessage.text
-                  }
-                </span>
-              </div>
-              <button
-                onClick={() => setReplyToMessage(null)}
-                className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-100"
-                title="Cancel reply"
-              >
-                ✕
-              </button>
+      {/* Message Input Area */}
+      <div className="flex items-center space-x-3 p-4 bg-white border-t border-gray-200">
+        {/* Emoji Picker Button */}
+        <button
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          className="p-2 text-gray-500 hover:text-gray-700 transition-colors duration-200"
+          title="Add emoji"
+        >
+          😊
+        </button>
+        
+        {/* Emoji Picker Popup */}
+        {showEmojiPicker && (
+          <div className="emoji-picker absolute bottom-20 left-4 bg-white border border-gray-200 rounded-lg shadow-lg p-3 z-50">
+            <div className="grid grid-cols-6 gap-2 max-w-48">
+              {['😊', '😂', '❤️', '👍', '😢', '😡', '🎉', '👏', '🔥', '💎', '⭐', '🚀', '🎯', '💯', '✨', '🌟', '💪', '🎊', '🎈', '🎁', '🍕', '☕', '🌺', '🌈'].map((emoji, index) => (
+                <button
+                  key={`emoji-${index}`}
+                  onClick={() => {
+                    setNewMessage(prev => prev + emoji);
+                    setShowEmojiPicker(false);
+                  }}
+                  className="p-2 hover:bg-gray-100 rounded transition-colors duration-200 text-lg"
+                >
+                  {emoji}
+                </button>
+              ))}
             </div>
           </div>
         )}
-        
-        <form onSubmit={handleSendMessage} className="flex items-center space-x-3">
-          {/* Emoji Button */}
-          <button
-            type="button"
-            className="p-3 text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 rounded-xl transition-all duration-200 hover:shadow-sm"
-            title="Add emoji"
-          >
-            😊
-          </button>
-          
-          {/* Attachment Button */}
-          <button
-            type="button"
-            className="p-3 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:shadow-sm"
-            title="Attach file"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-            </svg>
-          </button>
-          
-          {/* Message Input */}
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              placeholder={`Type a message to ${selectedUser.username}...`}
-              className="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50 font-sans text-sm transition-all duration-200 hover:bg-white focus:bg-white"
-            />
-            {newMessage.trim() && (
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-400">
-                {newMessage.length}/500
-              </div>
-            )}
-          </div>
-          
-          {/* Send Button */}
-          <button
-            type="submit"
-            disabled={!newMessage.trim()}
-            className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-2xl hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md font-sans text-sm font-medium flex items-center space-x-2"
-          >
-            <span>Send</span>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
-        </form>
-        
-        {/* Typing Indicator */}
-        {isTyping && (
-          <div className="mt-3 flex items-center space-x-2 text-sm text-gray-500">
-            <div className="flex space-x-1">
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-            </div>
-            <span>{selectedUser.username} is typing...</span>
-          </div>
-        )}
+
+        {/* Attachment Button */}
+        <button className="p-2 text-gray-500 hover:text-gray-700 transition-colors duration-200">
+          📎
+        </button>
+
+        {/* Message Input */}
+        <input
+          type="text"
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder={`Type a message to ${selectedUser?.username || 'someone'}...`}
+          className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          onKeyPress={(e) => {
+            if (e.key === 'Enter' && newMessage.trim()) {
+              onSendMessage(newMessage.trim());
+              setNewMessage('');
+            }
+          }}
+        />
+
+        {/* Send Button */}
+        <button
+          onClick={() => {
+            if (newMessage.trim()) {
+              onSendMessage(newMessage.trim());
+              setNewMessage('');
+            }
+          }}
+          disabled={!newMessage.trim()}
+          className="px-6 py-2 bg-blue-500 text-white rounded-full hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors duration-200"
+        >
+          Send
+        </button>
       </div>
 
       {/* Forward Modal */}
@@ -874,6 +828,9 @@ export default function ModernChatInterface({
           </div>
         </div>
       )}
+      
+      {/* Message Context Menu */}
+      {/* This block is removed as context menu is no longer used */}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import connectDB from '@/lib/mongodb';
-import User from '@/models/User';
+import connectDB from '../../../../lib/mongodb';
+import User from '../../../../models/User';
 
 // Get user's active sessions
 export async function GET(request: NextRequest) {
@@ -65,7 +65,7 @@ export async function DELETE(request: NextRequest) {
     // Remove the specific session
     if (user.activeSessions) {
       user.activeSessions = user.activeSessions.filter(
-        session => session.sessionId !== sessionId
+        (session: any) => session.sessionId !== sessionId
       );
       await user.save();
     }

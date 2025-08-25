@@ -16,13 +16,11 @@ export default function Connections({ onUserSelect, selectedUserId, currentUserI
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [localUsers, setLocalUsers] = useState<User[]>(users);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Update local users when prop changes
   useEffect(() => {
     console.log('🔄 Connections: users prop changed:', users.map(u => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
-    setLocalUsers(users);
   }, [users]);
 
 
@@ -30,72 +28,46 @@ export default function Connections({ onUserSelect, selectedUserId, currentUserI
   // Initialize socket event listeners when socket is available
   useEffect(() => {
     if (socket && currentUserId) {
-      console.log('🔌 Setting up socket event listeners in Connections component');
-      console.log('🔌 Current users prop:', users.map(u => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
-      
       // Request current online status of all users
       socket.emit('get-online-status');
       console.log('🔌 Emitted get-online-status from Connections');
       
-      // Listen for online status updates
-      socket.on('online-status-updated', (data: { userStatuses: User[] }) => {
-        console.log('👥 Connections received online-status-updated:', data.userStatuses.map(u => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
-        
-        // Filter out current user and remove duplicates
-        const otherUsers = data.userStatuses.filter(u => u.id !== currentUserId);
-        const uniqueUsers = otherUsers.filter((user, index, self) =>
-          index === self.findIndex(u => u.id === user.id)
-        );
-        
-        setLocalUsers(uniqueUsers);
-        console.log('👥 Connections updated localUsers to:', uniqueUsers.map(u => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
-      });
-      
-      // Listen for individual user status changes
-      socket.on('user-status-changed', (data: { userId: string; status: string; lastActivity: string }) => {
-        console.log('👤 Connections received user-status-changed:', data);
-        setLocalUsers(prevUsers => {
-          const updatedUsers = prevUsers.map(user =>
-            user.id === data.userId
-              ? { ...user, status: data.status as 'online' | 'offline' | 'away', lastActivity: data.lastActivity }
-              : user
-          );
-          
-          // Remove duplicates after status update
-          const uniqueUsers = updatedUsers.filter((user, index, self) =>
-            index === self.findIndex(u => u.id === user.id)
-          );
-          
-          console.log('🔄 Updated local users after status change:', uniqueUsers.map(u => `${u.username}: ${u.status} (isOnline: ${u.isOnline})`));
-          return uniqueUsers;
-        });
-      });
-      
       // Cleanup function
       return () => {
-        socket.off('online-status-updated');
-        socket.off('user-status-changed');
+        // Socket event handlers removed as users are now passed as props
       };
     }
   }, [socket, currentUserId, users]);
 
-  // Send periodic activity updates
+  // Send periodic activity updates - OPTIMIZED
   useEffect(() => {
     if (socket && currentUserId) {
+      let lastActivitySent = 0;
+      const MIN_ACTIVITY_INTERVAL = 15000; // 15 seconds minimum between activity updates
+      
       const interval = setInterval(() => {
-        socket.emit('user-activity', currentUserId);
-      }, 30000); // Send activity update every 30 seconds
+        const now = Date.now();
+        if (now - lastActivitySent >= MIN_ACTIVITY_INTERVAL) {
+          try {
+            socket.emit('user-activity', currentUserId);
+            lastActivitySent = now;
+          } catch (error) {
+            console.error('❌ Error sending activity update from Connections:', error);
+          }
+        }
+      }, 30000); // Check every 30 seconds, but only send if enough time has passed
 
       return () => clearInterval(interval);
     }
   }, [socket, currentUserId]);
 
+  // Use users prop directly instead of maintaining separate localUsers state
+  const otherUsers = users.filter(user => user.id !== currentUserId);
+  
   // Filter users based on search query (excluding current user)
-  const filteredUsers = localUsers.filter(user => 
-    user.id !== currentUserId && (
-      user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+  const filteredUsers = otherUsers.filter(user => 
+    user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Ensure no duplicates in the final display
@@ -191,13 +163,13 @@ export default function Connections({ onUserSelect, selectedUserId, currentUserI
   };
 
   const getStatusColor = (user: User) => {
-    if (user.status === 'online') return 'bg-green-500';
+    if (user.isOnline === true) return 'bg-green-500';
     if (user.status === 'away') return 'bg-yellow-500';
     return 'bg-gray-400';
   };
 
   const getStatusText = (user: User) => {
-    if (user.status === 'online') return 'Online';
+    if (user.isOnline === true) return 'Online';
     if (user.status === 'away') return 'Away';
     return 'Offline';
   };
@@ -237,11 +209,11 @@ export default function Connections({ onUserSelect, selectedUserId, currentUserI
         <div className="flex space-x-4 mt-4">
           <div className="flex items-center space-x-2 text-sm text-gray-600">
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            <span>{uniqueUsers.filter(u => u.status === 'online').length} Online</span>
+            <span>{uniqueUsers.filter(u => u.isOnline === true).length} Online</span>
           </div>
           <div className="flex items-center space-x-2 text-sm text-gray-600">
             <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-            <span>{uniqueUsers.filter(u => u.status === 'offline').length} Offline</span>
+            <span>{uniqueUsers.filter(u => u.isOnline === false).length} Offline</span>
           </div>
         </div>
       </div>
@@ -325,9 +297,9 @@ export default function Connections({ onUserSelect, selectedUserId, currentUserI
                       
                       {/* Status Indicator */}
                       <div className={`absolute -bottom-2 -right-2 w-5 h-5 ${getStatusColor(user)} rounded-full border-3 border-white shadow-lg transition-all duration-300 ${
-                        user.status === 'online' ? 'animate-pulse' : ''
+                        user.isOnline === true ? 'animate-pulse' : ''
                       }`}>
-                        {user.status === 'online' && (
+                        {user.isOnline === true && (
                           <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75"></div>
                         )}
                       </div>
@@ -347,7 +319,7 @@ export default function Connections({ onUserSelect, selectedUserId, currentUserI
                           {/* Status and Activity */}
                           <div className="flex items-center space-x-4">
                             <div className="flex items-center space-x-2">
-                              <div className={`w-2 h-2 ${getStatusColor(user)} rounded-full ${user.status === 'online' ? 'animate-pulse' : ''}`}></div>
+                              <div className={`w-2 h-2 ${getStatusColor(user)} rounded-full ${user.isOnline === true ? 'animate-pulse' : ''}`}></div>
                               <span className="text-xs font-medium text-gray-600">
                                 {getStatusText(user)}
                               </span>

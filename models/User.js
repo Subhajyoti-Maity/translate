@@ -26,13 +26,37 @@ const userSchema = new mongoose.Schema({
     default: 'en',
     required: true
   },
-  createdAt: {
+  isOnline: {
+    type: Boolean,
+    default: false
+  },
+  lastActivity: {
     type: Date,
     default: Date.now
   },
   lastSeen: {
     type: Date,
     default: Date.now
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+// Add a virtual for 'id' that maps to '_id'
+userSchema.virtual('id').get(function() {
+  return this._id.toHexString();
+});
+
+// Ensure virtual fields are serialized
+userSchema.set('toJSON', {
+  virtuals: true,
+  transform: function(doc, ret) {
+    ret.id = ret._id;
+    delete ret._id;
+    delete ret.__v;
+    return ret;
   }
 });
 

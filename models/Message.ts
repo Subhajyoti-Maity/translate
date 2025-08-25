@@ -19,23 +19,49 @@ const messageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  isDeleted: {
+  isRead: {
     type: Boolean,
     default: false
   },
+  // WhatsApp-style deletion fields
   deletedFor: {
     type: [String], // Array of user IDs for whom the message is deleted
     default: []
   },
-  // Add reactions field
+  deletedForEveryone: {
+    type: Boolean,
+    default: false
+  },
+  // Add reactions field - Extended list of popular, user-friendly emojis
   reactions: {
     type: Map,
     of: {
       type: String,
-      enum: ['👍', '❤️', '😂', '😊', '😮', '😢', '😡', '🎉']
+      enum: ['👍', '❤️', '😂', '😊', '😮', '😢', '😡', '🎉', '🔥', '💯', '👏', '🙏', '🤔', '😴', '🤮', '💪', '🎯', '🚀', '⭐', '💎']
     },
     default: new Map()
   }
 });
+
+// Add a virtual for 'id' that maps to '_id'
+messageSchema.virtual('id').get(function() {
+  return this._id.toHexString();
+});
+
+// Ensure virtual fields are serialized
+messageSchema.set('toJSON', {
+  virtuals: true,
+  transform: function(doc: any, ret: any) {
+    ret.id = ret._id;
+    delete (ret as any)._id;
+    delete (ret as any).__v;
+    return ret;
+  }
+});
+
+// Index for better query performance on deletion fields
+messageSchema.index({ deletedFor: 1 });
+messageSchema.index({ deletedForEveryone: 1 });
+messageSchema.index({ senderId: 1, receiverId: 1 });
 
 export default mongoose.models.Message || mongoose.model('Message', messageSchema);

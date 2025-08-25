@@ -1,22 +1,25 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { format } from 'date-fns';
 import ReactionBar from './ReactionBar';
 
 interface MessageProps {
   message: {
-    _id: string;
+    id: string;
     text: string;
     timestamp: string;
     senderId: string;
     receiverId: string;
     reactions?: Record<string, string>;
+    deletedFor?: string[];
+    deletedForEveryone?: boolean;
   };
   isOwnMessage: boolean;
   currentUserId: string;
   onReactionToggle: (messageId: string, reaction: string, userId: string) => void;
   onForwardMessage?: (messageId: string, text: string) => void;
+  onDeleteMessage?: (messageId: string, deleteType: 'for-me' | 'for-everyone') => void;
   availableUsers?: Array<{ id: string; username: string; email: string }>;
 }
 
@@ -26,6 +29,7 @@ const Message: React.FC<MessageProps> = ({
   currentUserId,
   onReactionToggle,
   onForwardMessage,
+  onDeleteMessage,
   availableUsers = []
 }) => {
   const [showReactions, setShowReactions] = useState(false);
@@ -34,6 +38,10 @@ const Message: React.FC<MessageProps> = ({
   const [currentReactions, setCurrentReactions] = useState<Record<string, string>>(
     message.reactions || {}
   );
+  const [showDeleteOptions, setShowDeleteOptions] = useState(false);
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(null);
+  const [isLongPressed, setIsLongPressed] = useState(false);
+  const messageRef = useRef<HTMLDivElement>(null);
 
   // Update reactions when they change
   useEffect(() => {
@@ -42,13 +50,65 @@ const Message: React.FC<MessageProps> = ({
     }
   }, [message.reactions]);
 
+  // Handle long press for mobile devices
+  const handleMouseDown = () => {
+    if (message.deletedFor?.includes(currentUserId) || message.deletedForEveryone) {
+      return; // Don't allow long press on deleted messages
+    }
+    
+    const timer = setTimeout(() => {
+      setIsLongPressed(true);
+      setShowDeleteOptions(true);
+    }, 500); // 500ms for long press
+    
+    setLongPressTimer(timer);
+  };
+
+  const handleMouseUp = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    setIsLongPressed(false);
+  };
+
+  const handleMouseLeave = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    setIsLongPressed(false);
+  };
+
+  // Touch events for mobile
+  const handleTouchStart = () => {
+    if (message.deletedFor?.includes(currentUserId) || message.deletedForEveryone) {
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      setIsLongPressed(true);
+      setShowDeleteOptions(true);
+    }, 500);
+    
+    setLongPressTimer(timer);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    setIsLongPressed(false);
+  };
+
   const handleReactionToggle = (reaction: string) => {
-    onReactionToggle(message._id, reaction, currentUserId);
+    onReactionToggle(message.id, reaction, currentUserId);
   };
 
   const handleForward = () => {
     if (selectedRecipient && onForwardMessage) {
-      onForwardMessage(message._id, message.text);
+      onForwardMessage(message.id, message.text);
       setShowForwardModal(false);
       setSelectedRecipient('');
     }
@@ -58,9 +118,41 @@ const Message: React.FC<MessageProps> = ({
     setShowForwardModal(true);
   };
 
+  const handleDeleteForMe = () => {
+    if (onDeleteMessage) {
+      onDeleteMessage(message.id, 'for-me');
+      setShowDeleteOptions(false);
+    }
+  };
+
+  const handleDeleteForEveryone = () => {
+    if (onDeleteMessage && isOwnMessage) {
+      onDeleteMessage(message.id, 'for-everyone');
+      setShowDeleteOptions(false);
+    }
+  };
+
+  // Check if message is deleted
+  const isDeletedForMe = message.deletedFor?.includes(currentUserId);
+  const isDeletedForEveryone = message.deletedForEveryone;
+  const isDeleted = isDeletedForMe || isDeletedForEveryone;
+
+  // Don't render deleted messages
+  if (isDeleted) {
+    return null;
+  }
+
   return (
     <>
-      <div className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-6 group`}>
+      <div 
+        ref={messageRef}
+        className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} mb-6 group relative`}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className={`max-w-xs lg:max-w-md relative ${isOwnMessage ? 'order-2' : 'order-1'}`}>
           {/* Avatar for other user's messages */}
           {!isOwnMessage && (
@@ -79,6 +171,7 @@ const Message: React.FC<MessageProps> = ({
                 ? 'bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-blue-200/50' 
                 : 'bg-white text-gray-800 shadow-gray-200/50 border border-gray-100'
               }
+              ${isLongPressed ? 'scale-105 shadow-xl' : ''}
             `}>
               {/* Message Text */}
               <div className="text-sm leading-relaxed">{message.text}</div>
@@ -118,17 +211,68 @@ const Message: React.FC<MessageProps> = ({
               </button>
               
               {/* Reactions */}
-              <div className="flex-1 ml-3">
-                <ReactionBar
-                  messageId={message._id}
-                  userId={currentUserId}
-                  currentReactions={currentReactions}
-                  onReactionToggle={handleReactionToggle}
-                />
-              </div>
+              {message.id && message.id !== 'undefined' && message.id !== 'null' && (
+                <div className="flex-1 ml-3">
+                  <ReactionBar
+                    messageId={message.id}
+                    userId={currentUserId}
+                    currentReactions={currentReactions}
+                    onReactionToggle={handleReactionToggle}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Simple Delete Options - WhatsApp Style */}
+        {showDeleteOptions && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black bg-opacity-50" onClick={() => setShowDeleteOptions(false)} />
+            <div className="relative bg-white rounded-2xl shadow-2xl border border-gray-200 min-w-[280px] max-w-[320px] overflow-hidden">
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center space-x-2">
+                  <span className="text-red-500 text-xl">🗑️</span>
+                  <span className="text-lg text-gray-800 font-semibold">Delete message?</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="p-3 space-y-2">
+                {/* Delete for Everyone - Only for sender */}
+                {isOwnMessage && (
+                  <button
+                    onClick={handleDeleteForEveryone}
+                    className="w-full text-sm bg-red-500 text-white px-4 py-3 rounded-lg hover:bg-red-600 transition-all duration-200 flex items-center justify-center space-x-2 font-medium shadow-md hover:shadow-lg transform hover:scale-105"
+                    title="Delete from everyone's view (like WhatsApp)"
+                  >
+                    <span className="text-lg">🌍</span>
+                    <span>Delete for everyone</span>
+                  </button>
+                )}
+
+                {/* Delete for Me - Always available */}
+                <button
+                  onClick={handleDeleteForMe}
+                  className="w-full text-sm bg-blue-500 text-white px-4 py-3 rounded-lg hover:bg-blue-600 transition-all duration-200 flex items-center justify-center space-x-2 font-medium shadow-md hover:shadow-lg transform hover:scale-105"
+                  title="Delete only from your view"
+                >
+                  <span className="text-lg">👁️</span>
+                  <span>Delete for me</span>
+                </button>
+
+                {/* Cancel */}
+                <button
+                  onClick={() => setShowDeleteOptions(false)}
+                  className="w-full text-sm bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 transition-all duration-200 font-medium shadow-md hover:shadow-lg transform hover:scale-105"
+                >
+                  ✕ Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Forward Modal */}

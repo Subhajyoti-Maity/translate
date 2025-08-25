@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
     // 2. Deleted for the requesting user (userId1)
     const messages = await Message.find({
       $or: [
-        { sender: userId1, receiver: userId2 },
-        { sender: userId2, receiver: userId1 }
+        { senderId: userId1, receiverId: userId2 },
+        { senderId: userId2, receiverId: userId1 }
       ],
       $and: [
         { deletedForEveryone: { $ne: true } }, // Not deleted for everyone
@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
         }
       ]
     })
-    .populate('sender', 'username')
-    .populate('receiver', 'username')
+    .populate('senderId', 'username')
+    .populate('receiverId', 'username')
     .sort({ timestamp: 1 })
     .limit(100);
 

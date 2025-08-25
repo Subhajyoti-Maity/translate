@@ -136,8 +136,8 @@ export default function ChatInterface({
           </div>
         ) : (
           messages.map((message, index) => {
-            const isOwnMessage = message.sender === user.id;
-            const showAvatar = index === 0 || messages[index - 1]?.sender !== message.sender;
+            const isOwnMessage = message.senderId === user.id;
+                          const showAvatar = index === 0 || messages[index - 1]?.senderId !== message.senderId;
 
             return (
               <div
@@ -188,14 +188,16 @@ export default function ChatInterface({
                     </div>
                     
                     {/* Reactions */}
-                    <div className="mt-3">
-                      <ReactionBar
-                        messageId={message.id}
-                        userId={user.id}
-                        currentReactions={message.reactions || {}}
-                        onReactionToggle={handleReactionToggle}
-                      />
-                    </div>
+                    {message.id && message.id !== 'undefined' && message.id !== 'null' && (
+                      <div className="mt-3">
+                        <ReactionBar
+                          messageId={message.id}
+                          userId={user.id}
+                          currentReactions={message.reactions || {}}
+                          onReactionToggle={handleReactionToggle}
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

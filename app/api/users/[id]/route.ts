@@ -5,16 +5,17 @@ import Message from '../../../../models/Message';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    console.log('🗑️ Delete user request for ID:', params.id);
+    const { id } = await params;
+    console.log('🗑️ Delete user request for ID:', id);
     
     // Connect to database
     await connectDB();
     
     // Validate user ID
-    if (!params.id || params.id.length !== 24) {
+    if (!id || id.length !== 24) {
       return NextResponse.json(
         { error: 'Invalid user ID format' },
         { status: 400 }
@@ -22,7 +23,7 @@ export async function DELETE(
     }
     
     // Find the user to delete
-    const userToDelete = await User.findById(params.id);
+    const userToDelete = await User.findById(id);
     if (!userToDelete) {
       return NextResponse.json(
         { error: 'User not found' },
@@ -39,15 +40,15 @@ export async function DELETE(
     // Delete all messages where this user is sender or receiver
     const messagesDeleted = await Message.deleteMany({
       $or: [
-        { sender: params.id },
-        { receiver: params.id }
+        { sender: id },
+        { receiver: id }
       ]
     });
     
     console.log('📨 Deleted messages:', messagesDeleted.deletedCount);
     
     // Delete the user
-    const userDeleted = await User.findByIdAndDelete(params.id);
+    const userDeleted = await User.findByIdAndDelete(id);
     
     if (!userDeleted) {
       return NextResponse.json(

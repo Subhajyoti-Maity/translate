@@ -7,12 +7,17 @@ import { useRouter } from 'next/navigation';
 export default function Login() {
   const [usernameOrEmail, setUsernameOrEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevent multiple submissions
+    if (isLoading) return;
+    
     setIsLoading(true);
     setError('');
 
@@ -26,9 +31,17 @@ export default function Login() {
       // Clear any existing error state
       setError('');
       
-      // Validate input
-      if (!usernameOrEmail.trim() || !password.trim()) {
+      // Validate input with specific messages
+      if (!usernameOrEmail.trim() && !password.trim()) {
         setError('Please enter both username/email and password');
+        return;
+      }
+      if (!usernameOrEmail.trim()) {
+        setError('Please enter your username or email');
+        return;
+      }
+      if (!password.trim()) {
+        setError('Please enter your password');
         return;
       }
       
@@ -47,7 +60,26 @@ export default function Login() {
 
       if (!response.ok) {
         console.error('❌ Login failed:', data.error);
-        throw new Error(data.error || 'Login failed');
+        
+        // Handle specific error messages
+        let errorMessage = 'Login failed';
+        if (data.error) {
+          switch (data.error) {
+            case 'Username or email not found':
+              errorMessage = 'Username or email not found';
+              break;
+            case 'Wrong password':
+              errorMessage = 'Wrong password';
+              break;
+            case 'Username/Email and password are required':
+              errorMessage = 'Please enter both username/email and password';
+              break;
+            default:
+              errorMessage = data.error;
+          }
+        }
+        
+        throw new Error(errorMessage);
       }
 
       console.log('✅ Login successful, storing data...');
@@ -61,6 +93,11 @@ export default function Login() {
         user: !!localStorage.getItem('user')
       });
 
+      // Clear form
+      setUsernameOrEmail('');
+      setPassword('');
+      setError('');
+      
       console.log('🔄 Redirecting to chat...');
       // Redirect to chat
       router.push('/');
@@ -120,7 +157,10 @@ export default function Login() {
                 autoComplete="username"
                 required
                 value={usernameOrEmail}
-                onChange={(e) => setUsernameOrEmail(e.target.value)}
+                onChange={(e) => {
+                  setUsernameOrEmail(e.target.value);
+                  if (error) setError(''); // Clear error when user starts typing
+                }}
                 className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:z-10 text-sm transition-all duration-200 hover:border-gray-400 focus:shadow-lg"
                 placeholder="Enter your username or email"
               />
@@ -129,26 +169,47 @@ export default function Login() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:z-10 text-sm transition-all duration-200 hover:border-gray-400 focus:shadow-lg"
-                placeholder="Enter your password"
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError(''); // Clear error when user starts typing
+                  }}
+                  className="appearance-none relative block w-full px-4 py-3 pr-12 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent focus:z-10 text-sm transition-all duration-200 hover:border-gray-400 focus:shadow-lg"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                >
+                  {showPassword ? '👁️' : '🙈'}
+                </button>
+              </div>
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-sm text-center animate-pulse">
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-sm text-center">
               <div className="flex items-center justify-center space-x-2">
-                <span>⚠️</span>
-                <span>{error}</span>
+                <span className="text-lg">
+                  {error.includes('password') ? '🔒' : 
+                   error.includes('not found') ? '👤' : '⚠️'}
+                </span>
+                <span className="font-medium">{error}</span>
               </div>
+              {error.includes('password') && (
+                <p className="text-xs text-red-500 mt-1">Please check your password and try again</p>
+              )}
+              {error.includes('not found') && (
+                <p className="text-xs text-red-500 mt-1">Please check your username/email and try again</p>
+              )}
             </div>
           )}
 

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       console.log('❌ User not found');
       return NextResponse.json(
-        { error: 'Invalid credentials' },
+        { error: 'Username or email not found' },
         { status: 401 }
       );
     }
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     if (!isPasswordValid) {
       console.log('❌ Invalid password');
       return NextResponse.json(
-        { error: 'Invalid credentials' },
+        { error: 'Wrong password' },
         { status: 401 }
       );
     }
